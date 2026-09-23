@@ -1,5 +1,7 @@
 "use server";
 
+import { selectConfigFiles } from "@/lib/analysis/config";
+import { analyzeModuleRelationships } from "@/lib/analysis/relationships";
 import { loadSourceFiles } from "@/lib/github/archive";
 import { readGitHubToken } from "@/lib/github/client";
 import { loadRepository } from "@/lib/github/repository";
@@ -14,6 +16,7 @@ export type DiscoveryResult =
         defaultBranch: string;
         entryCount: number;
         sourceFileCount: number;
+        relationshipCount: number;
         skippedCount: number;
         limited: boolean;
       };
@@ -34,8 +37,16 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
 
   const { metadata, tree } = loaded.data;
   const selection = selectSourceFiles(tree.entries);
-  const sources = await loadSourceFiles(metadata, selection.candidates, { token });
+  const sources = await loadSourceFiles(metadata, selection.candidates, {
+    token,
+    extraFiles: selectConfigFiles(tree.entries),
+  });
   if (!sources.ok) return { ok: false, message: sources.error.message };
+
+  const analysis = analyzeModuleRelationships(sources.data.files, {
+    configFiles: sources.data.extraFiles,
+    repositoryPaths: tree.entries.filter((entry) => entry.type === "blob").map((entry) => entry.path),
+  });
 
   return {
     ok: true,
@@ -44,6 +55,7 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
       defaultBranch: metadata.defaultBranch,
       entryCount: tree.entries.length,
       sourceFileCount: sources.data.files.length,
+      relationshipCount: analysis.stats.relationships,
       skippedCount: selection.skipped.length + sources.data.skipped.length,
       limited: selection.limited,
     },

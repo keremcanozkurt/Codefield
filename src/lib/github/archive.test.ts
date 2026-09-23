@@ -99,6 +99,7 @@ describe("extractSourceFiles", () => {
           { ...util, content: "module.exports = {};\n" },
         ],
         skipped: [],
+        extraFiles: [],
       },
     });
   });
@@ -240,6 +241,47 @@ describe("extractSourceFiles", () => {
     assert.deepEqual(result.data.skipped, [{ path: "latin1.js", reason: "not_utf8" }]);
   });
 
+  it("reads requested extra files alongside source files", () => {
+    const tsconfig = '{ "compilerOptions": { "paths": { "@/*": ["./src/*"] } } }\n';
+    const index = candidate("src/index.ts");
+    const archive = zip({
+      "src/index.ts": "// src/index.ts\n",
+      "tsconfig.json": tsconfig,
+      "apps/web/jsconfig.json": "{}",
+    });
+    const extra = (path: string, content: string) => {
+      const bytes = strToU8(content);
+      return { path, sha: gitBlobSha(bytes), size: bytes.length };
+    };
+
+    const result = extractSourceFiles(archive, [index], {
+      extraFiles: [
+        extra("tsconfig.json", tsconfig),
+        extra("apps/web/jsconfig.json", "{}"),
+        extra("missing/tsconfig.json", "{}"),
+      ],
+    });
+
+    assert.ok(result.ok);
+    assert.deepEqual(result.data.files.map((f) => f.path), ["src/index.ts"]);
+    assert.deepEqual(result.data.skipped, []);
+    assert.deepEqual(result.data.extraFiles, [
+      { path: "tsconfig.json", content: tsconfig },
+      { path: "apps/web/jsconfig.json", content: "{}" },
+    ]);
+  });
+
+  it("leaves out extra files whose content differs from the tree", () => {
+    const archive = zip({ "a.ts": "// a.ts\n", "tsconfig.json": "{}" });
+    const result = extractSourceFiles(archive, [candidate("a.ts")], {
+      extraFiles: [{ path: "tsconfig.json", sha: gitBlobSha(strToU8("[]")), size: 2 }],
+    });
+
+    assert.ok(result.ok);
+    assert.deepEqual(result.data.extraFiles, []);
+    assert.deepEqual(result.data.skipped, []);
+  });
+
   it("decodes multi-byte UTF-8", () => {
     const text = 'const label = "héllo wörld – ✓";\n';
     const result = extractSourceFiles(zip({ "label.js": text }), [candidate("label.js", text)]);
@@ -279,9 +321,24 @@ describe("loadSourceFiles", () => {
     const github = fakeGitHub({});
     assert.deepEqual(await loadSourceFiles(repository, [], { fetch: github.fetch }), {
       ok: true,
-      data: { files: [], skipped: [] },
+      data: { files: [], skipped: [], extraFiles: [] },
     });
     assert.equal(github.requests.length, 0);
+  });
+
+  it("reads extra files from the same archive request", async () => {
+    const bytes = strToU8("{}");
+    const github = fakeGitHub({
+      [ARCHIVE_URL]: () => zipResponse(zip({ "src/index.ts": "// src/index.ts\n", "tsconfig.json": bytes })),
+    });
+    const result = await loadSourceFiles(repository, [index], {
+      fetch: github.fetch,
+      extraFiles: [{ path: "tsconfig.json", sha: gitBlobSha(bytes), size: bytes.length }],
+    });
+
+    assert.ok(result.ok);
+    assert.deepEqual(result.data.extraFiles, [{ path: "tsconfig.json", content: "{}" }]);
+    assert.equal(github.requests.length, 1);
   });
 
   it("sends no Authorization header without a token", async () => {

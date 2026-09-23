@@ -14,22 +14,42 @@ export const MAX_ARCHIVE_ENTRIES = 100_000;
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
+export type ArchiveFileCandidate = {
+  path: string;
+  sha: string;
+  size: number;
+};
+
+export type ArchiveTextFile = {
+  path: string;
+  content: string;
+};
+
 export type SourceLoadResult = {
   files: SourceFile[];
   skipped: SkippedSource[];
+  // Requested extra files that were found and matched the tree. Missing or
+  // unreadable ones are left out.
+  extraFiles: ArchiveTextFile[];
 };
 
-type ArchiveLimits = {
+type ExtractOptions = {
   maxEntries?: number;
+  extraFiles?: ArchiveFileCandidate[];
+};
+
+type LoadOptions = GitHubRequestOptions & {
+  // Small non-source files, such as tsconfig.json, read from the same archive.
+  extraFiles?: ArchiveFileCandidate[];
 };
 
 export async function loadSourceFiles(
   repository: Pick<RepositoryMetadata, "owner" | "name" | "defaultBranch">,
   candidates: SourceCandidate[],
-  options: GitHubRequestOptions = {},
+  { extraFiles = [], ...options }: LoadOptions = {},
 ): Promise<GitHubResult<SourceLoadResult>> {
   if (candidates.length === 0) {
-    return { ok: true, data: { files: [], skipped: [] } };
+    return { ok: true, data: { files: [], skipped: [], extraFiles: [] } };
   }
 
   const path = [
@@ -54,15 +74,17 @@ export async function loadSourceFiles(
     return { ok: false, error: download.error };
   }
 
-  return extractSourceFiles(download.bytes, candidates);
+  return extractSourceFiles(download.bytes, candidates, { extraFiles });
 }
 
 export function extractSourceFiles(
   archive: Uint8Array,
   candidates: SourceCandidate[],
-  { maxEntries = MAX_ARCHIVE_ENTRIES }: ArchiveLimits = {},
+  { maxEntries = MAX_ARCHIVE_ENTRIES, extraFiles = [] }: ExtractOptions = {},
 ): GitHubResult<SourceLoadResult> {
-  const wanted = new Map(candidates.map((candidate) => [candidate.path, candidate]));
+  const wanted = new Map<string, ArchiveFileCandidate>(
+    [...extraFiles, ...candidates].map((candidate) => [candidate.path, candidate]),
+  );
   const seen = new Set<string>();
   const mismatched = new Set<string>();
   let root = null as string | null;
@@ -143,7 +165,18 @@ export function extractSourceFiles(
     }
   }
 
-  return { ok: true, data: { files, skipped } };
+  const extra: ArchiveTextFile[] = [];
+  for (const candidate of extraFiles) {
+    const bytes = extracted[`${root}/${candidate.path}`];
+    if (bytes === undefined || !matchesBlob(bytes, candidate)) continue;
+    try {
+      extra.push({ path: candidate.path, content: utf8.decode(bytes) });
+    } catch {
+      // Unreadable extra files are treated as absent.
+    }
+  }
+
+  return { ok: true, data: { files, skipped, extraFiles: extra } };
 }
 
 // GitHub archives put every entry under one generated directory, such as
@@ -169,7 +202,7 @@ function parseArchivePath(
 
 // A Git blob ID is the SHA-1 of "blob <size>\0" followed by the content, so the
 // archive entry can be checked against the tree without another request.
-function matchesBlob(bytes: Uint8Array, candidate: SourceCandidate): boolean {
+function matchesBlob(bytes: Uint8Array, candidate: ArchiveFileCandidate): boolean {
   if (bytes.length !== candidate.size) return false;
 
   const sha = createHash("sha1")
