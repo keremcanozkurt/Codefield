@@ -5,6 +5,7 @@ import { analyzeModuleRelationships } from "@/lib/analysis/relationships";
 import { loadSourceFiles } from "@/lib/github/archive";
 import { readGitHubToken } from "@/lib/github/client";
 import { loadRepository } from "@/lib/github/repository";
+import { buildDependencyGraph } from "@/lib/graph/build";
 import { parseRepositoryUrl } from "@/lib/repository-url";
 import { selectSourceFiles } from "@/lib/source-files";
 
@@ -17,6 +18,7 @@ export type DiscoveryResult =
         entryCount: number;
         sourceFileCount: number;
         relationshipCount: number;
+        edgeCount: number;
         skippedCount: number;
         limited: boolean;
       };
@@ -47,6 +49,7 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
     configFiles: sources.data.extraFiles,
     repositoryPaths: tree.entries.filter((entry) => entry.type === "blob").map((entry) => entry.path),
   });
+  const graph = buildDependencyGraph(sources.data.files, analysis.relationships);
 
   return {
     ok: true,
@@ -56,6 +59,7 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
       entryCount: tree.entries.length,
       sourceFileCount: sources.data.files.length,
       relationshipCount: analysis.stats.relationships,
+      edgeCount: graph.stats.edges,
       skippedCount: selection.skipped.length + sources.data.skipped.length,
       limited: selection.limited,
     },

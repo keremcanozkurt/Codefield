@@ -29,6 +29,8 @@ Each source file is parsed with the TypeScript compiler API. Parsing is syntax-o
 
 A reference becomes a relationship only when it resolves to another loaded source file. Relative specifiers are tried as written, then with `.ts`, `.tsx`, `.js` and `.jsx` appended, then as a directory containing an `index` file with those extensions in the same order. A `.js` specifier also matches a `.ts` or `.tsx` file with the same name. Other specifiers are resolved with `compilerOptions.baseUrl` and `compilerOptions.paths` from the nearest `tsconfig.json` or `jsconfig.json`, following `extends` when it is a relative path to another config file in the repository. Package imports are ignored. Package `exports`, workspace packages and bundler-specific aliases are not resolved.
 
+The dependency graph has one node per loaded source file, including files with no relationships, and one directed edge per pair of files with at least one relationship between them. An edge records how many relationships it combines and of which kinds.
+
 ## Scripts
 
 - `npm run dev` starts the development server
