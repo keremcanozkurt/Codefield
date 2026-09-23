@@ -21,3 +21,4 @@ Then open http://localhost:3000.
 - `npm run build` creates a production build
 - `npm run lint` runs ESLint
 - `npm run typecheck` generates Next.js route types and runs `tsc --noEmit`
+- `npm test` runs unit tests with Node's built-in test runner (needs Node.js 22.18 or later, which runs TypeScript files directly)
