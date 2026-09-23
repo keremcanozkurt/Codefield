@@ -15,6 +15,8 @@ npm run dev
 
 Then open http://localhost:3000.
 
+Requests to the GitHub API are anonymous by default, which GitHub limits to 60 per hour per IP address. To raise the limit, copy `.env.example` to `.env.local` and set `GITHUB_TOKEN`. The token is only read on the server.
+
 ## Scripts
 
 - `npm run dev` starts the development server

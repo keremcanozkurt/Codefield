@@ -1,24 +1,39 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 
+import { discoverRepository, type DiscoveryResult } from "@/app/actions";
 import { parseRepositoryUrl } from "@/lib/repository-url";
+
+type Discovery = { input: string; result: DiscoveryResult };
 
 export function RepositoryForm() {
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
+  const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  const result = parseRepositoryUrl(value);
+  const parsed = parseRepositoryUrl(value);
   const isEmpty = value.trim() === "";
-  const error = touched && !isEmpty && !result.ok ? result.error : null;
+  const validationError = touched && !isEmpty && !parsed.ok ? parsed.error : null;
+  // A result only applies to the input it was requested for.
+  const result = discovery?.input === value ? discovery.result : null;
+  const error = validationError ?? (result && !result.ok ? result.message : null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTouched(true);
+    if (!parsed.ok || isPending) return;
+
+    const input = value;
+    startTransition(async () => {
+      const next = await discoverRepository(input);
+      setDiscovery({ input, result: next });
+    });
   }
 
   return (
-    <form noValidate onSubmit={handleSubmit} className="mt-10">
+    <form noValidate onSubmit={handleSubmit} aria-busy={isPending} className="mt-10">
       <div className="flex flex-col gap-3 sm:flex-row">
         <label htmlFor="repository-url" className="sr-only">
           GitHub repository URL
@@ -33,13 +48,13 @@ export function RepositoryForm() {
           placeholder="https://github.com/owner/repository"
           autoComplete="off"
           spellCheck={false}
-          aria-invalid={error ? true : undefined}
-          aria-describedby="repository-url-error"
+          aria-invalid={validationError ? true : undefined}
+          aria-describedby="repository-url-status"
           className="h-11 min-w-0 rounded-md border border-line bg-surface px-3.5 text-base sm:flex-1 sm:text-[15px] text-foreground placeholder:text-subtle transition-colors duration-150 hover:border-line-strong focus:border-line-strong focus:outline-2 focus:outline-offset-2 focus:outline-foreground/40 aria-invalid:border-danger/60 aria-invalid:hover:border-danger/60 aria-invalid:focus:border-danger/60"
         />
         <button
           type="submit"
-          disabled={!result.ok}
+          disabled={!parsed.ok || isPending}
           className="h-11 shrink-0 rounded-md bg-foreground px-4 text-base sm:text-[15px] font-medium text-background transition-colors duration-150 enabled:hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/60 disabled:cursor-not-allowed disabled:bg-foreground/35 disabled:text-background/80"
         >
           Generate constellation
@@ -47,11 +62,22 @@ export function RepositoryForm() {
       </div>
       {/* Kept mounted with a reserved line so the live region announces changes and the layout does not shift. */}
       <p
-        id="repository-url-error"
+        id="repository-url-status"
         aria-live="polite"
-        className="mt-2 min-h-5 text-sm text-danger"
+        className="mt-2 min-h-5 text-sm text-muted"
       >
-        {error}
+        {error ? (
+          <span className="text-danger">{error}</span>
+        ) : isPending ? (
+          "Loading repository tree…"
+        ) : result?.ok ? (
+          <>
+            <span className="font-mono text-foreground">{result.repository.fullName}</span>
+            {" on "}
+            <span className="font-mono text-foreground">{result.repository.defaultBranch}</span>
+            {` · ${result.repository.entryCount.toLocaleString("en-US")} tree entries`}
+          </>
+        ) : null}
       </p>
     </form>
   );
