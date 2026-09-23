@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type Sigma from "sigma";
 
 import { toGraphology } from "@/lib/visualization/graphology";
+import { hoveredEdgeStyle, hoveredNodeStyle } from "@/lib/visualization/mapping";
+import { RENDERER_SETTINGS } from "@/lib/visualization/settings";
 import type { EdgeAttributes, NodeAttributes, RenderGraph } from "@/lib/visualization/types";
 
 type ConstellationProps = {
@@ -24,17 +26,36 @@ export function Constellation({ graph, label }: ConstellationProps) {
 
     // Sigma reads WebGL globals when its module is evaluated, so it is loaded
     // here rather than imported at the top, which would also run on the server.
-    Promise.all([import("sigma"), import("sigma/rendering")])
-      .then(([{ default: Sigma }, { drawDiscNodeLabel }]) => {
+    import("sigma")
+      .then(({ default: Sigma }) => {
         if (cancelled) return;
-        renderer = new Sigma(toGraphology(graph), container, {
-          defaultEdgeType: "arrow",
-          labelFont: "ui-sans-serif, system-ui, sans-serif",
-          labelSize: 12,
-          labelColor: { color: "#8b8f99" },
-          // Sigma's default hover draws the label on a white box.
-          defaultDrawNodeHover: drawDiscNodeLabel,
+        const visual = toGraphology(graph);
+        let hovered: string | null = null;
+
+        const sigma = new Sigma<NodeAttributes, EdgeAttributes>(visual, container, {
+          ...RENDERER_SETTINGS,
+          nodeReducer: (node, data) => (node === hovered ? hoveredNodeStyle(data) : data),
+          edgeReducer: (edge, data) =>
+            hovered !== null && visual.hasExtremity(edge, hovered) ? hoveredEdgeStyle(data) : data,
         });
+
+        // Only the node and its edges change, so they are repainted without
+        // reindexing the whole graph.
+        const repaint = (node: string) =>
+          sigma.refresh({
+            partialGraph: { nodes: [node], edges: visual.edges(node) },
+            skipIndexation: true,
+          });
+        sigma.on("enterNode", ({ node }) => {
+          hovered = node;
+          repaint(node);
+        });
+        sigma.on("leaveNode", ({ node }) => {
+          hovered = null;
+          repaint(node);
+        });
+
+        renderer = sigma;
       })
       .catch((error: unknown) => {
         if (cancelled) return;

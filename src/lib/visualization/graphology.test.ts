@@ -5,7 +5,9 @@ import { buildDependencyGraph, edgeId } from "../graph/build.ts";
 import type { SourceExtension, SourceFile } from "../source-files.ts";
 import { toGraphology } from "./graphology.ts";
 import { layoutNodes } from "./layout.ts";
+import { edgeStyle, fileSizeToNodeSize, nodeColor } from "./mapping.ts";
 import { toRenderGraph } from "./payload.ts";
+import { NODE } from "./theme.ts";
 import type { RenderEdge, RenderGraph, RenderNode } from "./types.ts";
 
 function node(path: string, degree = 0): RenderNode {
@@ -40,6 +42,17 @@ function sample(): RenderGraph {
       edge("src/lib/tokens.ts", "src/lib/parser.ts"),
     ],
   };
+}
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const result = [...items];
+  let state = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    const j = state % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
 }
 
 function deepFreeze<T>(value: T): T {
@@ -117,31 +130,78 @@ describe("toGraphology", () => {
     assert.equal(graph.getNodeAttribute("README.js", "label"), "README.js");
   });
 
-  it("uses the same size and color for every node", () => {
+  it("sizes nodes by file size", () => {
     const graph = toGraphology({
-      nodes: [{ ...node("src/a.ts"), size: 10, degree: 0 }, { ...node("src/b.ts"), size: 90_000, degree: 40 }],
+      nodes: [
+        { ...node("src/small.ts"), size: 200 },
+        { ...node("src/medium.ts"), size: 5_000 },
+        { ...node("src/large.ts"), size: 60_000 },
+      ],
       edges: [],
     });
+    const size = (id: string) => graph.getNodeAttribute(id, "size");
 
-    assert.deepEqual(
-      graph.getNodeAttributes("src/a.ts").size,
-      graph.getNodeAttributes("src/b.ts").size,
-    );
-    assert.equal(
-      graph.getNodeAttributes("src/a.ts").color,
-      graph.getNodeAttributes("src/b.ts").color,
-    );
+    assert.ok(size("src/medium.ts") > size("src/small.ts"));
+    assert.ok(size("src/large.ts") > size("src/medium.ts"));
+    assert.equal(size("src/medium.ts"), fileSizeToNodeSize(5_000));
   });
 
-  it("sets only renderer attributes on edges, independent of weight", () => {
+  it("emphasizes connected nodes without letting degree set the size", () => {
+    const graph = toGraphology({
+      nodes: [
+        { ...node("src/isolated.ts", 0), size: 3_000 },
+        { ...node("src/hub.ts", 40), size: 3_000 },
+        { ...node("src/big.ts", 0), size: 60_000 },
+      ],
+      edges: [],
+    });
+    const isolated = graph.getNodeAttributes("src/isolated.ts");
+    const hub = graph.getNodeAttributes("src/hub.ts");
+
+    assert.ok(hub.size > isolated.size);
+    assert.ok(hub.size <= isolated.size * (1 + NODE.degreeSizeBoost) + 1e-9);
+    assert.ok(hub.size < graph.getNodeAttribute("src/big.ts", "size"));
+    assert.equal(hub.color, nodeColor("typescript", 1));
+    assert.equal(isolated.color, nodeColor("typescript", 0));
+  });
+
+  it("colors nodes by language", () => {
+    const graph = toGraphology({ nodes: [node("src/a.ts"), node("src/b.js")], edges: [] });
+
+    assert.equal(graph.getNodeAttribute("src/a.ts", "color"), nodeColor("typescript", 0));
+    assert.equal(graph.getNodeAttribute("src/b.js", "color"), nodeColor("javascript", 0));
+  });
+
+  it("keeps isolated nodes visible", () => {
+    const graph = toGraphology({ nodes: [{ ...node("src/empty.ts", 0), size: 0 }], edges: [] });
+    const { size, color } = graph.getNodeAttributes("src/empty.ts");
+
+    assert.equal(size, NODE.minSize);
+    assert.equal(color, nodeColor("typescript", 0));
+  });
+
+  it("sets only renderer attributes on edges", () => {
     const graph = toGraphology(sample());
 
     graph.forEachEdge((id, attributes) => {
       assert.deepEqual(Object.keys(attributes).sort(), ["color", "size"]);
     });
+  });
+
+  it("emphasizes edges that combine several relationships", () => {
+    const graph = toGraphology(sample());
     const heavy = graph.getEdgeAttributes(edgeId("src/index.ts", "src/lib/parser.ts"));
     const light = graph.getEdgeAttributes(edgeId("src/lib/parser.ts", "src/lib/tokens.ts"));
-    assert.deepEqual(heavy, light);
+
+    assert.ok(heavy.size > light.size);
+    assert.notEqual(heavy.color, light.color);
+    assert.deepEqual(light, edgeStyle({ id: "x", source: "a", target: "b", weight: 1 }));
+  });
+
+  it("never forces labels on", () => {
+    const graph = toGraphology(sample());
+
+    graph.forEachNode((id, attributes) => assert.ok(!("forceLabel" in attributes)));
   });
 
   it("uses the deterministic layout for positions", () => {
@@ -160,6 +220,22 @@ describe("toGraphology", () => {
 
     a.forEachNode((id, attributes) => assert.deepEqual(b.getNodeAttributes(id), attributes));
     a.forEachEdge((id, attributes) => assert.deepEqual(b.getEdgeAttributes(id), attributes));
+  });
+
+  it("produces the same attributes for shuffled nodes and edges", () => {
+    const nodes = Array.from({ length: 60 }, (_, i) => ({
+      ...node(`src/dir-${i % 7}/file-${i}.${i % 3 === 0 ? "js" : "ts"}`, i % 9),
+      size: (i * 7919) % 70_000,
+    }));
+    const edges = nodes.slice(1).map((n, i) => edge(nodes[i].id, n.id, (i % 5) + 1));
+    const reference = toGraphology({ nodes, edges });
+    const shuffledNodes = toGraphology({ nodes: shuffled(nodes, 3), edges });
+    const shuffledEdges = toGraphology({ nodes, edges: shuffled(edges, 11) });
+
+    for (const graph of [shuffledNodes, shuffledEdges]) {
+      reference.forEachNode((id, attributes) => assert.deepEqual(graph.getNodeAttributes(id), attributes));
+      reference.forEachEdge((id, attributes) => assert.deepEqual(graph.getEdgeAttributes(id), attributes));
+    }
   });
 
   it("throws instead of creating a duplicate node", () => {
@@ -215,8 +291,9 @@ describe("toGraphology", () => {
     const graph = toGraphology({ nodes: [node("index.ts")], edges: [] });
 
     assert.equal(graph.order, 1);
-    const { x, y } = graph.getNodeAttributes("index.ts");
+    const { x, y, size } = graph.getNodeAttributes("index.ts");
     assert.ok(Number.isFinite(x) && Number.isFinite(y));
+    assert.ok(size >= NODE.minSize);
   });
 
   it("handles two connected nodes", () => {
@@ -229,16 +306,25 @@ describe("toGraphology", () => {
     assert.equal(graph.size, 1);
     assert.equal(graph.outDegree("a.ts"), 1);
     assert.equal(graph.inDegree("b.ts"), 1);
+    graph.forEachNode((id, { size }) => assert.ok(size >= NODE.minSize));
+    assert.ok(graph.getEdgeAttribute(edgeId("a.ts", "b.ts"), "size") > 0);
   });
 
   it("handles 500 nodes", () => {
-    const nodes = Array.from({ length: 500 }, (_, i) => node(`src/dir-${i % 23}/file-${i}.ts`));
-    const edges = nodes.slice(1).map((n, i) => edge(nodes[i].id, n.id));
+    const nodes = Array.from({ length: 500 }, (_, i) => ({
+      ...node(`src/dir-${i % 23}/file-${i}.${i % 4 === 0 ? "js" : "ts"}`, i % 40),
+      size: (i * 104_729) % 520_000,
+    }));
+    const edges = nodes.slice(1).map((n, i) => edge(nodes[i].id, n.id, (i % 12) + 1));
     const graph = toGraphology({ nodes, edges });
 
     assert.equal(graph.order, 500);
     assert.equal(graph.size, 499);
-    graph.forEachNode((id, { x, y }) => assert.ok(Number.isFinite(x) && Number.isFinite(y)));
+    graph.forEachNode((id, { x, y, size, color }) => {
+      assert.ok(Number.isFinite(x) && Number.isFinite(y));
+      assert.ok(size >= NODE.minSize && size <= NODE.maxSize * (1 + NODE.degreeSizeBoost));
+      assert.match(color, /^#[0-9a-f]{6}$/);
+    });
   });
 });
 
