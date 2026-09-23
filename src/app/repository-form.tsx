@@ -4,6 +4,7 @@ import { useState, useTransition, type FormEvent } from "react";
 
 import { discoverRepository, type DiscoveryResult } from "@/app/actions";
 import { parseRepositoryUrl } from "@/lib/repository-url";
+import { MAX_SOURCE_FILES } from "@/lib/source-files";
 
 type Discovery = { input: string; result: DiscoveryResult };
 
@@ -69,16 +70,25 @@ export function RepositoryForm() {
         {error ? (
           <span className="text-danger">{error}</span>
         ) : isPending ? (
-          "Loading repository tree…"
+          "Loading repository…"
         ) : result?.ok ? (
           <>
             <span className="font-mono text-foreground">{result.repository.fullName}</span>
             {" on "}
             <span className="font-mono text-foreground">{result.repository.defaultBranch}</span>
-            {` · ${result.repository.entryCount.toLocaleString("en-US")} tree entries`}
+            {` · ${formatCount(result.repository.entryCount, "tree entry", "tree entries")}`}
+            {` · ${formatCount(result.repository.sourceFileCount, "source file", "source files")}`}
+            {result.repository.skippedCount > 0 &&
+              ` · ${result.repository.skippedCount.toLocaleString("en-US")} skipped`}
+            {result.repository.limited &&
+              ` · analysis limited to ${MAX_SOURCE_FILES.toLocaleString("en-US")} files`}
           </>
         ) : null}
       </p>
     </form>
   );
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? singular : plural}`;
 }

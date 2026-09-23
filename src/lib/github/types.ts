@@ -35,6 +35,9 @@ export type GitHubErrorCode =
   | "malformed_response"
   | "tree_unavailable"
   | "tree_truncated"
+  | "archive_unavailable"
+  | "archive_too_large"
+  | "malformed_archive"
   | "network_error"
   | "upstream_error";
 

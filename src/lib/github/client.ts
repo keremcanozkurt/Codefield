@@ -3,6 +3,7 @@ import type { GitHubError, RateLimit } from "./types.ts";
 const API_ORIGIN = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 const REQUEST_TIMEOUT_MS = 15_000;
+const ARCHIVE_TIMEOUT_MS = 60_000;
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -11,9 +12,11 @@ export type GitHubRequestOptions = {
   fetch?: FetchLike;
 };
 
-export type GitHubResponse =
-  | { ok: true; data: unknown }
-  | { ok: false; status: number | null; error: GitHubError };
+type GitHubFailure = { ok: false; status: number | null; error: GitHubError };
+
+export type GitHubResponse = { ok: true; data: unknown } | GitHubFailure;
+
+export type GitHubDownload = { ok: true; bytes: Uint8Array } | GitHubFailure;
 
 export function readGitHubToken(): string | undefined {
   const token = process.env.GITHUB_TOKEN?.trim();
@@ -24,6 +27,77 @@ export async function requestGitHub(
   path: string,
   options: GitHubRequestOptions = {},
 ): Promise<GitHubResponse> {
+  const sent = await send(path, options, REQUEST_TIMEOUT_MS);
+  if (!sent.ok) return sent;
+
+  try {
+    return { ok: true, data: await sent.response.json() };
+  } catch {
+    return { ok: false, status: sent.response.status, error: malformedResponse() };
+  }
+}
+
+// Archive endpoints answer with a redirect to codeload.github.com. fetch drops
+// the Authorization header on that cross-origin hop, so the token only reaches
+// api.github.com.
+export async function downloadGitHubArchive(
+  path: string,
+  maxBytes: number,
+  options: GitHubRequestOptions = {},
+): Promise<GitHubDownload> {
+  const sent = await send(path, options, ARCHIVE_TIMEOUT_MS);
+  if (!sent.ok) return sent;
+
+  const { response } = sent;
+  const tooLarge: GitHubFailure = {
+    ok: false,
+    status: response.status,
+    error: {
+      code: "archive_too_large",
+      message: "This repository is too large for Codefield to download.",
+    },
+  };
+
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && Number(declaredLength) > maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    return tooLarge;
+  }
+
+  // Archives are generated on the fly and usually have no content-length, so
+  // the limit is enforced while reading.
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    const reader = response.body?.getReader();
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.length;
+      if (length > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return tooLarge;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { ok: false, status: null, error: networkError() };
+  }
+
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return { ok: true, bytes };
+}
+
+async function send(
+  path: string,
+  options: GitHubRequestOptions,
+  timeoutMs: number,
+): Promise<{ ok: true; response: Response } | GitHubFailure> {
   const { token, fetch: fetchImpl = fetch } = options;
 
   const headers: Record<string, string> = {
@@ -37,14 +111,10 @@ export async function requestGitHub(
   try {
     response = await fetchImpl(`${API_ORIGIN}${path}`, {
       headers,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
-    return {
-      ok: false,
-      status: null,
-      error: { code: "network_error", message: "Could not reach GitHub." },
-    };
+    return { ok: false, status: null, error: networkError() };
   }
 
   if (!response.ok) {
@@ -55,11 +125,11 @@ export async function requestGitHub(
     };
   }
 
-  try {
-    return { ok: true, data: await response.json() };
-  } catch {
-    return { ok: false, status: response.status, error: malformedResponse() };
-  }
+  return { ok: true, response };
+}
+
+function networkError(): GitHubError {
+  return { code: "network_error", message: "Could not reach GitHub." };
 }
 
 export function malformedResponse(): GitHubError {

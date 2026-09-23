@@ -1,8 +1,10 @@
 "use server";
 
+import { loadSourceFiles } from "@/lib/github/archive";
 import { readGitHubToken } from "@/lib/github/client";
 import { loadRepository } from "@/lib/github/repository";
 import { parseRepositoryUrl } from "@/lib/repository-url";
+import { selectSourceFiles } from "@/lib/source-files";
 
 export type DiscoveryResult =
   | {
@@ -11,6 +13,9 @@ export type DiscoveryResult =
         fullName: string;
         defaultBranch: string;
         entryCount: number;
+        sourceFileCount: number;
+        skippedCount: number;
+        limited: boolean;
       };
     }
   | { ok: false; message: string };
@@ -23,18 +28,24 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
   const parsed = parseRepositoryUrl(input);
   if (!parsed.ok) return { ok: false, message: parsed.error };
 
-  const result = await loadRepository(parsed.repository, {
-    token: readGitHubToken(),
-  });
-  if (!result.ok) return { ok: false, message: result.error.message };
+  const token = readGitHubToken();
+  const loaded = await loadRepository(parsed.repository, { token });
+  if (!loaded.ok) return { ok: false, message: loaded.error.message };
 
-  const { metadata, tree } = result.data;
+  const { metadata, tree } = loaded.data;
+  const selection = selectSourceFiles(tree.entries);
+  const sources = await loadSourceFiles(metadata, selection.candidates, { token });
+  if (!sources.ok) return { ok: false, message: sources.error.message };
+
   return {
     ok: true,
     repository: {
       fullName: metadata.fullName,
       defaultBranch: metadata.defaultBranch,
       entryCount: tree.entries.length,
+      sourceFileCount: sources.data.files.length,
+      skippedCount: selection.skipped.length + sources.data.skipped.length,
+      limited: selection.limited,
     },
   };
 }
