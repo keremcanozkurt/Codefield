@@ -1,0 +1,23 @@
+# Codefield
+
+Turns a public GitHub repository into an interactive map of its code.
+
+Early development. Repository analysis and the graph view are not implemented yet.
+
+## Running locally
+
+Requires Node.js 20.9 or later.
+
+```bash
+npm install
+npm run dev
+```
+
+Then open http://localhost:3000.
+
+## Scripts
+
+- `npm run dev` starts the development server
+- `npm run build` creates a production build
+- `npm run lint` runs ESLint
+- `npm run typecheck` generates Next.js route types and runs `tsc --noEmit`
