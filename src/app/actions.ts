@@ -8,6 +8,8 @@ import { loadRepository } from "@/lib/github/repository";
 import { buildDependencyGraph } from "@/lib/graph/build";
 import { parseRepositoryUrl } from "@/lib/repository-url";
 import { selectSourceFiles } from "@/lib/source-files";
+import { toRenderGraph } from "@/lib/visualization/payload";
+import type { RenderGraph } from "@/lib/visualization/types";
 
 export type DiscoveryResult =
   | {
@@ -22,6 +24,7 @@ export type DiscoveryResult =
         skippedCount: number;
         limited: boolean;
       };
+      graph: RenderGraph;
     }
   | { ok: false; message: string };
 
@@ -63,5 +66,6 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
       skippedCount: selection.skipped.length + sources.data.skipped.length,
       limited: selection.limited,
     },
+    graph: toRenderGraph(graph),
   };
 }
