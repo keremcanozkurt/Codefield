@@ -39,6 +39,12 @@ export function Constellation({ graph, label }: ConstellationProps) {
             hovered !== null && visual.hasExtremity(edge, hovered) ? hoveredEdgeStyle(data) : data,
         });
 
+        // Frames small layouts with margin instead of stretching them to the
+        // viewport. Sigma applies the box when it processes the graph, so this
+        // needs a full refresh; both run before the first frame is drawn.
+        sigma.setCustomBBox(visual.getAttribute("frame"));
+        sigma.refresh();
+
         // Only the node and its edges change, so they are repainted without
         // reindexing the whole graph.
         const repaint = (node: string) =>

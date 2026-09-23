@@ -4,8 +4,8 @@ import { describe, it } from "node:test";
 import { buildDependencyGraph, edgeId } from "../graph/build.ts";
 import type { SourceExtension, SourceFile } from "../source-files.ts";
 import { toGraphology } from "./graphology.ts";
-import { layoutNodes } from "./layout.ts";
-import { edgeStyle, fileSizeToNodeSize, nodeColor } from "./mapping.ts";
+import { layoutConstellation } from "./layout.ts";
+import { edgeStyle, fileSizeToNodeSize, nodeColor, nodeStyle } from "./mapping.ts";
 import { toRenderGraph } from "./payload.ts";
 import { NODE } from "./theme.ts";
 import type { RenderEdge, RenderGraph, RenderNode } from "./types.ts";
@@ -204,12 +204,24 @@ describe("toGraphology", () => {
     graph.forEachNode((id, attributes) => assert.ok(!("forceLabel" in attributes)));
   });
 
-  it("uses the deterministic layout for positions", () => {
+  it("uses the constellation layout for positions and stores its frame", () => {
     const input = sample();
     const graph = toGraphology(input);
-    const positions = layoutNodes(input.nodes.map((n) => n.id));
+    const layout = layoutConstellation(input);
 
-    graph.forEachNode((id, { x, y }) => assert.deepEqual({ x, y }, positions.get(id)));
+    graph.forEachNode((id, { x, y }) => assert.deepEqual({ x, y }, layout.positions.get(id)));
+    assert.deepEqual(graph.getAttributes(), { frame: layout.frame });
+  });
+
+  it("changes only positions, not the visual mapping", () => {
+    const input = sample();
+    const graph = toGraphology(input);
+
+    for (const n of input.nodes) {
+      const { x, y, ...style } = graph.getNodeAttributes(n.id);
+      assert.ok(Number.isFinite(x) && Number.isFinite(y));
+      assert.deepEqual(style, nodeStyle(n));
+    }
   });
 
   it("produces the same attributes regardless of input order", () => {
@@ -380,5 +392,17 @@ describe("dependency graph to Graphology", () => {
 
     toGraphology(toRenderGraph(dependencyGraph));
     assert.deepEqual(dependencyGraph, copy);
+  });
+
+  it("keeps layout data out of the dependency graph and the payload", () => {
+    const payload = toRenderGraph(dependencyGraph);
+    toGraphology(payload);
+
+    for (const n of [...dependencyGraph.nodes, ...payload.nodes]) {
+      for (const key of ["x", "y", "radius", "angle", "cluster", "clusterColor"]) {
+        assert.ok(!(key in n), `${n.id} has ${key}`);
+      }
+    }
+    assert.ok(!("frame" in dependencyGraph) && !("frame" in payload));
   });
 });

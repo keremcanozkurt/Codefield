@@ -2,7 +2,7 @@
 
 Turns a public GitHub repository into an interactive map of its code.
 
-Early development. The dependency graph is rendered, but without final styling, folder clustering or file details.
+Early development. The dependency graph is rendered, but without file details, search or filters.
 
 ## Running locally
 
@@ -35,12 +35,14 @@ The dependency graph has one node per loaded source file, including files with n
 
 The browser receives only the graph: each file's path, directory, language, size and edge counts, and each edge's endpoints and weight. Source contents, import specifiers and the GitHub token stay on the server.
 
-The graph is converted to a directed [Graphology](https://graphology.github.io/) graph and drawn with [Sigma.js](https://www.sigmajs.org/), which needs WebGL. Each file is placed at a point derived from a hash of its path, so a repository renders the same way on every load. Scroll or pinch to zoom and drag to pan.
+The graph is converted to a directed [Graphology](https://graphology.github.io/) graph and drawn with [Sigma.js](https://www.sigmajs.org/), which needs WebGL. Scroll or pinch to zoom and drag to pan.
 
 - A file's radius follows the logarithm of its size in bytes, between fixed bounds at 128 bytes and 64 KiB, so it does not depend on the other files in the repository.
 - TypeScript files are drawn in a blue-grey tone and JavaScript files in a warm grey. Files with more edges are drawn slightly brighter and up to 20% larger. Files without edges use the dimmest tone.
 - Edges are thin and mostly transparent. An edge that combines several relationships is drawn a little thicker and more opaque.
 - Labels show the file name. Larger stars are labelled first, more labels appear when zooming in, and hovering a file shows its name and highlights its edges.
+
+Files are placed by directory: each directory's files form a group, nested directories sit inside their parent's region, and a directory that only contains one other directory is treated as part of it. Groups of sibling directories are packed next to each other, preferring positions near the siblings they import from or are imported by, and imports between files then pull them slightly closer without moving them out of their group. Positions are computed once, before the graph is drawn, and depend only on the graph, so a repository renders the same way on every load.
 
 ## Scripts
 
