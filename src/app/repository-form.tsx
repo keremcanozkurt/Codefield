@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 
 import { discoverRepository, type DiscoveryResult } from "@/app/actions";
-import { Constellation } from "@/components/constellation";
+import { GraphWorkspace } from "@/components/graph-workspace";
 import { parseRepositoryUrl } from "@/lib/repository-url";
 import { MAX_SOURCE_FILES } from "@/lib/source-files";
 
@@ -97,7 +97,7 @@ export function RepositoryForm() {
       </form>
       {result?.ok && (
         <section className="mx-auto mt-6 w-full max-w-7xl">
-          <Constellation
+          <GraphWorkspace
             graph={result.graph}
             label={`Dependency graph of ${result.repository.fullName}: ${formatCount(result.graph.nodes.length, "file", "files")}, ${formatCount(result.graph.edges.length, "edge", "edges")}`}
           />

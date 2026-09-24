@@ -13,6 +13,8 @@ export type ConstellationLayout = {
   // Coordinates are within [-1, 1] on both axes.
   positions: Map<string, Position>;
   frame: Frame;
+  // The area the stars actually cover, including their radii.
+  bounds: Frame;
   // Node-size units per coordinate unit. Stars are spaced as if a node of
   // size s had a radius of s / scale in these coordinates.
   scale: number;
@@ -563,6 +565,7 @@ function normalize(context: Context): Omit<ConstellationLayout, "groups"> {
     return {
       positions,
       frame: { x: [-1, 1], y: [-LAYOUT.minFrameHeight, LAYOUT.minFrameHeight] },
+      bounds: { x: [0, 0], y: [0, 0] },
       scale: LAYOUT.minHalfExtent,
     };
   }
@@ -615,7 +618,15 @@ function normalize(context: Context): Omit<ConstellationLayout, "groups"> {
     positions.set(ids[i], { x: (x[i] - cx) / scale, y: (y[i] - cy) / scale });
   }
   const frameHeight = Math.max(halfHeight / scale, LAYOUT.minFrameHeight);
-  return { positions, frame: { x: [-1, 1], y: [-frameHeight, frameHeight] }, scale };
+  return {
+    positions,
+    frame: { x: [-1, 1], y: [-frameHeight, frameHeight] },
+    bounds: {
+      x: [-halfWidth / scale, halfWidth / scale],
+      y: [-halfHeight / scale, halfHeight / scale],
+    },
+    scale,
+  };
 }
 
 // A key for a directory's own files. Paths cannot contain NUL, so it never

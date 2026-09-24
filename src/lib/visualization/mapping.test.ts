@@ -224,7 +224,7 @@ describe("edge mapping", () => {
   });
 
   it("is deterministic", () => {
-    assert.deepEqual(edgeStyle({ id: "e", source: "a", target: "b", weight: 3 }), {
+    assert.deepEqual(edgeStyle({ id: "e", source: "a", target: "b", weight: 3, kinds: ["import"] }), {
       size: edgeSize(3),
       color: edgeColor(3),
     });
@@ -286,7 +286,7 @@ describe("hover styles", () => {
   });
 
   it("makes edges of the hovered node easier to see", () => {
-    const base = edgeStyle({ id: "e", source: "a", target: "b", weight: 1 });
+    const base = edgeStyle({ id: "e", source: "a", target: "b", weight: 1, kinds: ["import"] });
     const hovered = hoveredEdgeStyle(base);
     const opacity = (color: string) => Number(RGBA.exec(color)![4]);
 

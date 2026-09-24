@@ -71,6 +71,11 @@ export function edgeStyle(edge: RenderEdge): EdgeAttributes {
   return { size: edgeSize(edge.weight), color: edgeColor(edge.weight) };
 }
 
+// Mixes a "#rrggbb" color towards another color.
+export function blend(color: string, target: Rgb, amount: number): string {
+  return toHex(mix(fromHex(color), target, amount));
+}
+
 export function hoveredNodeStyle<T extends NodeStyle>(attributes: T): T {
   return {
     ...attributes,

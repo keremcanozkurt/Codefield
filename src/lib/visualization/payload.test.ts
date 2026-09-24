@@ -48,7 +48,7 @@ describe("toRenderGraph", () => {
       ]);
     }
     for (const edge of payload.edges) {
-      assert.deepEqual(Object.keys(edge).sort(), ["id", "source", "target", "weight"]);
+      assert.deepEqual(Object.keys(edge).sort(), ["id", "kinds", "source", "target", "weight"]);
     }
   });
 
@@ -67,7 +67,13 @@ describe("toRenderGraph", () => {
       degree: 1,
     });
     assert.deepEqual(payload.edges, [
-      { id: graph.edges[0].id, source: "src/index.ts", target: "src/parser.ts", weight: 2 },
+      {
+        id: graph.edges[0].id,
+        source: "src/index.ts",
+        target: "src/parser.ts",
+        weight: 2,
+        kinds: ["import", "reexport"],
+      },
     ]);
     assert.deepEqual(
       payload.nodes.map((node) => node.id),
@@ -99,6 +105,19 @@ describe("toRenderGraph", () => {
       if (previous === undefined) delete process.env.GITHUB_TOKEN;
       else process.env.GITHUB_TOKEN = previous;
     }
+  });
+
+  it("lists relationship kinds in a fixed order", () => {
+    const files = ["a.ts", "b.ts", "c.ts"].map((path) => source(path, ""));
+    const graph = buildDependencyGraph(files, [
+      { sourcePath: "a.ts", targetPath: "b.ts", kind: "require", specifier: "./b" },
+      { sourcePath: "a.ts", targetPath: "b.ts", kind: "dynamic_import", specifier: "./b.ts" },
+      { sourcePath: "a.ts", targetPath: "b.ts", kind: "import", specifier: "./b.js" },
+      { sourcePath: "c.ts", targetPath: "b.ts", kind: "reexport", specifier: "./b" },
+    ]);
+    const kinds = Object.fromEntries(toRenderGraph(graph).edges.map((e) => [e.source, e.kinds]));
+
+    assert.deepEqual(kinds, { "a.ts": ["import", "dynamic_import", "require"], "c.ts": ["reexport"] });
   });
 
   it("survives a JSON round trip unchanged", () => {

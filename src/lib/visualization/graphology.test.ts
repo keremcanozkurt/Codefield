@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { buildDependencyGraph, edgeId } from "../graph/build.ts";
 import type { SourceExtension, SourceFile } from "../source-files.ts";
 import { toGraphology } from "./graphology.ts";
+import { initialCameraRatio } from "./focus.ts";
 import { layoutConstellation } from "./layout.ts";
 import { edgeStyle, fileSizeToNodeSize, nodeColor, nodeStyle } from "./mapping.ts";
 import { toRenderGraph } from "./payload.ts";
@@ -25,7 +26,7 @@ function node(path: string, degree = 0): RenderNode {
 }
 
 function edge(source: string, target: string, weight = 1): RenderEdge {
-  return { id: edgeId(source, target), source, target, weight };
+  return { id: edgeId(source, target), source, target, weight, kinds: ["import"] };
 }
 
 function sample(): RenderGraph {
@@ -195,7 +196,7 @@ describe("toGraphology", () => {
 
     assert.ok(heavy.size > light.size);
     assert.notEqual(heavy.color, light.color);
-    assert.deepEqual(light, edgeStyle({ id: "x", source: "a", target: "b", weight: 1 }));
+    assert.deepEqual(light, edgeStyle({ id: "x", source: "a", target: "b", weight: 1, kinds: ["import"] }));
   });
 
   it("never forces labels on", () => {
@@ -210,7 +211,10 @@ describe("toGraphology", () => {
     const layout = layoutConstellation(input);
 
     graph.forEachNode((id, { x, y }) => assert.deepEqual({ x, y }, layout.positions.get(id)));
-    assert.deepEqual(graph.getAttributes(), { frame: layout.frame });
+    assert.deepEqual(graph.getAttributes(), {
+      frame: layout.frame,
+      initialRatio: initialCameraRatio(layout.bounds, layout.frame),
+    });
   });
 
   it("changes only positions, not the visual mapping", () => {

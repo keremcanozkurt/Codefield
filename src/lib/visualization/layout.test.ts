@@ -21,7 +21,7 @@ function node(path: string, size = 2_000, degree = 0): RenderNode {
 }
 
 function edge(source: string, target: string, weight = 1): RenderEdge {
-  return { id: edgeId(source, target), source, target, weight };
+  return { id: edgeId(source, target), source, target, weight, kinds: ["import"] };
 }
 
 // Sets each node's degree from the edges, as the dependency graph does.
@@ -383,7 +383,7 @@ describe("layoutConstellation", () => {
     it("ignores node fields and key order that the layout does not use", () => {
       const graph = nextApp();
       const reshaped: RenderGraph = {
-        edges: graph.edges.map(({ weight, target, source, id }) => ({ weight, target, source, id })),
+        edges: graph.edges.map(({ kinds, weight, target, source, id }) => ({ kinds, weight, target, source, id })),
         nodes: graph.nodes.map((n) => ({ ...n, language: "javascript" as const, incoming: 99, outgoing: 99 })),
       };
 

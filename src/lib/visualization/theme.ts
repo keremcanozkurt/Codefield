@@ -36,6 +36,26 @@ export const EDGE = {
   hoverSize: 1.4,
 } as const;
 
+// --color-surface, the graph background.
+export const SURFACE: Rgb = [13, 15, 19];
+
+// Appearance while a file is selected. Everything derives from the language
+// colors; files outside the selection are mixed towards the background rather
+// than made transparent, so they stay visible without blending into edges.
+export const FOCUS = {
+  selectedSizeScale: 1.4,
+  // Share of white mixed into the selected file and its neighbours.
+  selectedLighten: 0.55,
+  neighborLighten: 0.2,
+  // Share of the background mixed into files outside the selection.
+  contextFade: 0.7,
+  contextEdgeOpacity: 0.05,
+  // Neighbours always show their labels when there are at most this many.
+  labelledNeighbors: 16,
+  // Graphs with at most this many files label every file; there is room.
+  labelledGraphSize: 12,
+} as const;
+
 export const LABEL = {
   font: "ui-sans-serif, system-ui, sans-serif",
   size: 11,

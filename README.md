@@ -2,7 +2,7 @@
 
 Turns a public GitHub repository into an interactive map of its code.
 
-Early development. The dependency graph is rendered, but without file details, search or filters.
+Early development. Files can be searched and inspected; there are no filters or image export yet.
 
 ## Running locally
 
@@ -33,7 +33,7 @@ The dependency graph has one node per loaded source file, including files with n
 
 ## Graph view
 
-The browser receives only the graph: each file's path, directory, language, size and edge counts, and each edge's endpoints and weight. Source contents, import specifiers and the GitHub token stay on the server.
+The browser receives only the graph: each file's path, directory, language, size and edge counts, and each edge's endpoints, weight and kinds of relationship (import, re-export, dynamic import, require). Source contents, import specifiers and the GitHub token stay on the server.
 
 The graph is converted to a directed [Graphology](https://graphology.github.io/) graph and drawn with [Sigma.js](https://www.sigmajs.org/), which needs WebGL. Scroll or pinch to zoom and drag to pan.
 
@@ -43,6 +43,8 @@ The graph is converted to a directed [Graphology](https://graphology.github.io/)
 - Labels show the file name. Larger stars are labelled first, more labels appear when zooming in, and hovering a file shows its name and highlights its edges.
 
 Files are placed by directory: each directory's files form a group, nested directories sit inside their parent's region, and a directory that only contains one other directory is treated as part of it. Groups of sibling directories are packed next to each other, preferring positions near the siblings they import from or are imported by, and imports between files then pull them slightly closer without moving them out of their group. Positions are computed once, before the graph is drawn, and depend only on the graph, so a repository renders the same way on every load.
+
+Clicking a file selects it: the file and the files it shares an edge with stay highlighted, and the rest of the graph dims. A panel lists the file's path, language, size and degree, the files it references and the files that reference it, each with the kind of reference when it is not a plain import. Selecting a file in either list moves the selection there. The search field matches file names and paths without regard to case. Escape, a click on an empty part of the graph, or the panel's close button clears the selection, and Reset view also returns the camera to its initial position. All of this runs in the browser on the graph that was already loaded.
 
 ## Scripts
 

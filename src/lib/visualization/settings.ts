@@ -15,4 +15,6 @@ export const RENDERER_SETTINGS = {
   labelGridCellSize: LABEL.gridCellSize,
   labelDensity: 1,
   defaultDrawNodeHover: drawHoverLabel,
+  // Lets the selected file and its edges draw above the faded rest of the graph.
+  zIndex: true,
 } satisfies Partial<Settings<NodeAttributes, EdgeAttributes>>;

@@ -1,3 +1,4 @@
+import type { ReferenceKind } from "../analysis/imports.ts";
 import type { SourceLanguage } from "../source-files.ts";
 
 // Graph data sent to the browser. toRenderGraph copies these fields by name, so
@@ -18,6 +19,8 @@ export type RenderEdge = {
   source: string;
   target: string;
   weight: number;
+  // Kinds of relationship the edge combines, in a fixed order.
+  kinds: ReferenceKind[];
 };
 
 export type RenderGraph = {

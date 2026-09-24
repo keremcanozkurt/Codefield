@@ -1,12 +1,15 @@
 import { DirectedGraph } from "graphology";
 
+import { initialCameraRatio } from "./focus.ts";
 import { layoutConstellation, type Frame } from "./layout.ts";
 import { edgeStyle, nodeStyle } from "./mapping.ts";
 import type { EdgeAttributes, NodeAttributes, RenderGraph } from "./types.ts";
 
 export type GraphAttributes = {
-  // The area the initial camera should show. See layoutConstellation.
+  // The area Sigma frames at camera ratio 1. See layoutConstellation.
   frame: Frame;
+  // The camera ratio to start at and to reset to. See initialCameraRatio.
+  initialRatio: number;
 };
 
 export type VisualGraph = DirectedGraph<NodeAttributes, EdgeAttributes, GraphAttributes>;
@@ -16,8 +19,8 @@ export type VisualGraph = DirectedGraph<NodeAttributes, EdgeAttributes, GraphAtt
 // means the input did not come from buildDependencyGraph.
 export function toGraphology(graph: RenderGraph): VisualGraph {
   const visual: VisualGraph = new DirectedGraph({ allowSelfLoops: false });
-  const { positions, frame } = layoutConstellation(graph);
-  visual.replaceAttributes({ frame });
+  const { positions, frame, bounds } = layoutConstellation(graph);
+  visual.replaceAttributes({ frame, initialRatio: initialCameraRatio(bounds, frame) });
 
   for (const node of graph.nodes) {
     const { x, y } = positions.get(node.id)!;
