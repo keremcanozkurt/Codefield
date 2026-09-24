@@ -1,65 +1,13 @@
 "use server";
 
-import { selectConfigFiles } from "@/lib/analysis/config";
-import { analyzeModuleRelationships } from "@/lib/analysis/relationships";
-import { loadSourceFiles } from "@/lib/github/archive";
-import { readGitHubToken } from "@/lib/github/client";
-import { loadRepository } from "@/lib/github/repository";
-import { buildDependencyGraph } from "@/lib/graph/build";
-import { parseRepositoryUrl } from "@/lib/repository-url";
-import { selectSourceFiles } from "@/lib/source-files";
-import { toRenderGraph } from "@/lib/visualization/payload";
-import type { RenderGraph } from "@/lib/visualization/types";
+import { discoverRepository as runDiscovery } from "@/lib/discovery";
+import type { DiscoveryResult } from "@/lib/discovery";
 
-export type DiscoveryResult =
-  | {
-      ok: true;
-      repository: {
-        fullName: string;
-        defaultBranch: string;
-        entryCount: number;
-        skippedCount: number;
-        limited: boolean;
-      };
-      graph: RenderGraph;
-    }
-  | { ok: false; message: string };
+export type { DiscoveryResult, RepositoryIdentity, SuccessResult } from "@/lib/discovery";
 
+// A thin "use server" boundary: the actual orchestration lives in
+// lib/discovery.ts, which uses relative imports so it can run under the
+// plain test runner instead of Next.js's module resolution.
 export async function discoverRepository(input: unknown): Promise<DiscoveryResult> {
-  if (typeof input !== "string") {
-    return { ok: false, message: "Enter a GitHub repository URL." };
-  }
-
-  const parsed = parseRepositoryUrl(input);
-  if (!parsed.ok) return { ok: false, message: parsed.error };
-
-  const token = readGitHubToken();
-  const loaded = await loadRepository(parsed.repository, { token });
-  if (!loaded.ok) return { ok: false, message: loaded.error.message };
-
-  const { metadata, tree } = loaded.data;
-  const selection = selectSourceFiles(tree.entries);
-  const sources = await loadSourceFiles(metadata, selection.candidates, {
-    token,
-    extraFiles: selectConfigFiles(tree.entries),
-  });
-  if (!sources.ok) return { ok: false, message: sources.error.message };
-
-  const analysis = analyzeModuleRelationships(sources.data.files, {
-    configFiles: sources.data.extraFiles,
-    repositoryPaths: tree.entries.filter((entry) => entry.type === "blob").map((entry) => entry.path),
-  });
-  const graph = buildDependencyGraph(sources.data.files, analysis.relationships);
-
-  return {
-    ok: true,
-    repository: {
-      fullName: metadata.fullName,
-      defaultBranch: metadata.defaultBranch,
-      entryCount: tree.entries.length,
-      skippedCount: selection.skipped.length + sources.data.skipped.length,
-      limited: selection.limited,
-    },
-    graph: toRenderGraph(graph),
-  };
+  return runDiscovery(input);
 }

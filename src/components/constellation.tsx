@@ -5,6 +5,7 @@ import type Sigma from "sigma";
 import type { CameraState, SigmaEvents } from "sigma/types";
 
 import { listen } from "@/lib/visualization/events";
+import { composeExport, computeExportDimensions, exportFileName } from "@/lib/visualization/export";
 import {
   CAMERA,
   closerRatio,
@@ -18,18 +19,24 @@ import {
 import { toGraphology, type VisualGraph } from "@/lib/visualization/graphology";
 import type { Neighborhood } from "@/lib/visualization/inspection";
 import { RENDERER_SETTINGS } from "@/lib/visualization/settings";
+import { SURFACE } from "@/lib/visualization/theme";
 import type { EdgeAttributes, NodeAttributes, RenderGraph } from "@/lib/visualization/types";
 
 export type ConstellationHandle = {
   // Brings a file to the middle of the view, zooming in on dense graphs.
   focus(id: string): void;
   resetView(): void;
+  // Renders the current viewport to a PNG and triggers a download. Resolves
+  // to whether it succeeded; never rejects.
+  exportPng(repositoryFullName: string): Promise<boolean>;
 };
 
 type ConstellationProps = {
   graph: RenderGraph;
   label: string;
   neighborhood: Neighborhood | null;
+  // Files that pass the active graph filters, or null when none are active.
+  visible: Set<string> | null;
   onSelect(id: string | null): void;
   ref?: Ref<ConstellationHandle>;
 };
@@ -44,10 +51,11 @@ type Session = {
 // centres it, and "closer" also zooms in.
 type CameraMove = "reveal" | "center" | "closer";
 
-export function Constellation({ graph, label, neighborhood, onSelect, ref }: ConstellationProps) {
+export function Constellation({ graph, label, neighborhood, visible, onSelect, ref }: ConstellationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const neighborhoodRef = useRef(neighborhood);
+  const visibleRef = useRef(visible);
   const onSelectRef = useRef(onSelect);
   // A camera move waiting for its selection to be applied, since the
   // inspector opening changes the size of the graph area first.
@@ -71,6 +79,12 @@ export function Constellation({ graph, label, neighborhood, onSelect, ref }: Con
           ratio: session.visual.getAttribute("initialRatio"),
           angle: 0,
         });
+      },
+      exportPng: (repositoryFullName) => {
+        const session = sessionRef.current;
+        const container = containerRef.current;
+        if (session === null || container === null) return Promise.resolve(false);
+        return exportConstellationPng(session, container, repositoryFullName);
       },
     }),
     [],
@@ -97,6 +111,7 @@ export function Constellation({ graph, label, neighborhood, onSelect, ref }: Con
           neighborhood: neighborhoodRef.current,
           hovered: null,
           labelAll: labelsAllFiles(visual.order),
+          visible: visibleRef.current,
         };
 
         const sigma = new Sigma<NodeAttributes, EdgeAttributes>(visual, container, {
@@ -183,6 +198,16 @@ export function Constellation({ graph, label, neighborhood, onSelect, ref }: Con
     }
   }, [neighborhood]);
 
+  // Filters only change which nodes and edges the reducers hide: the camera
+  // and the underlying layout are left alone.
+  useEffect(() => {
+    visibleRef.current = visible;
+    const session = sessionRef.current;
+    if (session === null) return;
+    session.state.visible = visible;
+    session.sigma.refresh();
+  }, [visible]);
+
   if (graph.nodes.length === 0) return null;
   const failed = failedGraph === graph;
 
@@ -242,4 +267,77 @@ function moveCameraTo(session: Session, target: Partial<CameraState>) {
   } else {
     void camera.animate(target, { duration: CAMERA.duration, easing: "quadraticOut" });
   }
+}
+
+// Renders the current viewport at export resolution using the live Sigma
+// renderer itself: no second renderer is created. The container is grown to
+// the export's device-pixel size, which Sigma's own resize() turns into
+// higher-resolution canvases, then refresh() repaints them; the finished
+// canvases are composited, and the container and renderer are restored to
+// exactly what they were. Everything from the first resize to the restoring
+// refresh runs synchronously (no `await` in between), so the browser has no
+// opportunity to paint the intermediate, larger frame: the live view never
+// visibly changes size. Pointer hover is dropped for the export frame only,
+// since an export has no pointer and freezing it avoids a frame that depends
+// on where the mouse happened to be; it is restored with everything else.
+async function exportConstellationPng(
+  session: Session,
+  container: HTMLDivElement,
+  repositoryFullName: string,
+): Promise<boolean> {
+  const { sigma, state } = session;
+  const dimensions = computeExportDimensions(container.offsetWidth, container.offsetHeight, window.devicePixelRatio || 1);
+  if (dimensions === null) return false;
+
+  const originalWidth = container.style.width;
+  const originalHeight = container.style.height;
+  const originalHovered = state.hovered;
+
+  let canvas: HTMLCanvasElement | null = null;
+  try {
+    container.style.width = `${dimensions.containerWidth}px`;
+    container.style.height = `${dimensions.containerHeight}px`;
+    state.hovered = null;
+    sigma.resize();
+    // Synchronous: refresh() without `schedule` calls render() directly, so
+    // the canvases already hold the export frame once this returns.
+    sigma.refresh();
+
+    canvas = document.createElement("canvas");
+    canvas.width = dimensions.outputWidth;
+    canvas.height = dimensions.outputHeight;
+    const context = canvas.getContext("2d");
+    if (context === null) {
+      canvas = null;
+    } else {
+      composeExport(context, sigma.getCanvases(), dimensions, SURFACE);
+    }
+  } catch (error: unknown) {
+    console.error("Could not export the dependency graph.", error);
+    canvas = null;
+  } finally {
+    // Restored even on failure, so a broken export never leaves the live
+    // graph resized, filtered by a stale hover, or otherwise out of sync.
+    container.style.width = originalWidth;
+    container.style.height = originalHeight;
+    state.hovered = originalHovered;
+    sigma.resize();
+    sigma.refresh();
+  }
+  if (canvas === null) return false;
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas!.toBlob(resolve, "image/png"));
+  if (blob === null) return false;
+
+  downloadBlob(blob, exportFileName(repositoryFullName));
+  return true;
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }

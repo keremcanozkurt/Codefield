@@ -67,14 +67,14 @@ function opacity(color: string): number {
 describe("focusNode", () => {
   const graph = sample();
   const index = buildGraphIndex(graph);
-  const selectedB: FocusState = { neighborhood: neighborhood(index, "src/b.ts"), hovered: null, labelAll: false };
+  const selectedB: FocusState = { neighborhood: neighborhood(index, "src/b.ts"), hovered: null, labelAll: false, visible: null };
 
   it("keeps the stored attributes and hover behaviour without a selection", () => {
     const data = attributes(graph, "src/a.ts");
 
-    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: null, labelAll: false }), data);
-    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: "src/a.ts", labelAll: false }), hoveredNodeStyle(data));
-    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: "src/c.ts", labelAll: false }), data);
+    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: null, labelAll: false, visible: null }), data);
+    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: "src/a.ts", labelAll: false, visible: null }), hoveredNodeStyle(data));
+    assert.deepEqual(focusNode("src/a.ts", data, { neighborhood: null, hovered: "src/c.ts", labelAll: false, visible: null }), data);
   });
 
   it("emphasizes the selected file most and labels it", () => {
@@ -116,7 +116,7 @@ describe("focusNode", () => {
   });
 
   it("treats files two edges away as unrelated", () => {
-    const state: FocusState = { neighborhood: neighborhood(index, "src/a.ts"), hovered: null, labelAll: false };
+    const state: FocusState = { neighborhood: neighborhood(index, "src/a.ts"), hovered: null, labelAll: false, visible: null };
 
     assert.equal(nodeRole(state.neighborhood!, "src/b.ts"), "neighbor");
     assert.equal(nodeRole(state.neighborhood!, "src/c.ts"), "context");
@@ -137,13 +137,13 @@ describe("focusNode", () => {
   it("stops forcing neighbour labels for files with many neighbours", () => {
     const leaves = Array.from({ length: FOCUS.labelledNeighbors + 1 }, (_, i) => node(`leaf-${i}.ts`, 1));
     const hub: RenderGraph = { nodes: [node("hub.ts", leaves.length), ...leaves], edges: leaves.map((l) => edge(l.id, "hub.ts")) };
-    const state: FocusState = { neighborhood: neighborhood(buildGraphIndex(hub), "hub.ts"), hovered: null, labelAll: false };
+    const state: FocusState = { neighborhood: neighborhood(buildGraphIndex(hub), "hub.ts"), hovered: null, labelAll: false, visible: null };
 
     assert.equal(focusNode("leaf-0.ts", attributes(hub, "leaf-0.ts"), state).forceLabel, false);
   });
 
   it("keeps an isolated selected file visible and emphasized", () => {
-    const state: FocusState = { neighborhood: neighborhood(index, "e.ts"), hovered: null, labelAll: false };
+    const state: FocusState = { neighborhood: neighborhood(index, "e.ts"), hovered: null, labelAll: false, visible: null };
     const data = attributes(graph, "e.ts");
     const selected = focusNode("e.ts", data, state);
 
@@ -154,13 +154,13 @@ describe("focusNode", () => {
   });
 
   it("labels every file of a very small graph, with or without a selection", () => {
-    const small: FocusState = { neighborhood: null, hovered: null, labelAll: true };
-    const selected: FocusState = { ...selectedB, labelAll: true };
+    const small: FocusState = { neighborhood: null, hovered: null, labelAll: true, visible: null };
+    const selected: FocusState = { ...selectedB, labelAll: true, visible: null };
     const data = attributes(graph, "src/a.ts");
 
     assert.equal(focusNode("src/a.ts", data, small).forceLabel, true);
     assert.equal(focusNode("src/a.ts", data, selected).forceLabel, true);
-    assert.equal(focusNode("src/a.ts", data, { ...small, labelAll: false }).forceLabel, undefined);
+    assert.equal(focusNode("src/a.ts", data, { ...small, labelAll: false, visible: null }).forceLabel, undefined);
     assert.ok(labelsAllFiles(1) && labelsAllFiles(FOCUS.labelledGraphSize));
     assert.ok(!labelsAllFiles(FOCUS.labelledGraphSize + 1) && !labelsAllFiles(500));
   });
@@ -169,21 +169,21 @@ describe("focusNode", () => {
     const data = Object.freeze(attributes(graph, "src/b.ts"));
 
     focusNode("src/b.ts", data, selectedB);
-    focusNode("src/b.ts", data, { neighborhood: null, hovered: "src/b.ts", labelAll: false });
+    focusNode("src/b.ts", data, { neighborhood: null, hovered: "src/b.ts", labelAll: false, visible: null });
     assert.deepEqual(data, attributes(graph, "src/b.ts"));
   });
 });
 
 describe("focusEdge", () => {
   const index = buildGraphIndex(sample());
-  const selectedB: FocusState = { neighborhood: neighborhood(index, "src/b.ts"), hovered: null, labelAll: false };
+  const selectedB: FocusState = { neighborhood: neighborhood(index, "src/b.ts"), hovered: null, labelAll: false, visible: null };
 
   it("keeps edges unchanged without a selection, except those of a hovered file", () => {
-    const none: FocusState = { neighborhood: null, hovered: null, labelAll: false };
+    const none: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: null };
 
     assert.deepEqual(focusEdge("src/a.ts", "src/b.ts", edgeAttributes, none), edgeAttributes);
     assert.deepEqual(
-      focusEdge("src/a.ts", "src/b.ts", edgeAttributes, { neighborhood: null, hovered: "src/b.ts", labelAll: false }),
+      focusEdge("src/a.ts", "src/b.ts", edgeAttributes, { neighborhood: null, hovered: "src/b.ts", labelAll: false, visible: null }),
       hoveredEdgeStyle(edgeAttributes),
     );
   });
@@ -200,12 +200,65 @@ describe("focusEdge", () => {
   });
 
   it("fades other edges strongly, including those between neighbours", () => {
-    const state: FocusState = { neighborhood: neighborhood(index, "src/c.ts"), hovered: "src/a.ts", labelAll: false };
+    const state: FocusState = { neighborhood: neighborhood(index, "src/c.ts"), hovered: "src/a.ts", labelAll: false, visible: null };
     const unrelated = focusEdge("src/a.ts", "src/b.ts", edgeAttributes, state);
 
     assert.ok(opacity(unrelated.color) <= opacity(edgeAttributes.color) / 3);
     assert.ok(opacity(unrelated.color) > 0);
     assert.equal(unrelated.zIndex, 0);
+  });
+});
+
+describe("filtering", () => {
+  const graph = sample();
+  const index = buildGraphIndex(graph);
+
+  it("hides a node that is not in the visible set", () => {
+    const data = attributes(graph, "src/a.ts");
+    const state: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/b.ts"]) };
+
+    assert.equal(focusNode("src/a.ts", data, state).hidden, true);
+  });
+
+  it("does not hide a node that is in the visible set", () => {
+    const data = attributes(graph, "src/a.ts");
+    const state: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/a.ts"]) };
+
+    assert.ok(!focusNode("src/a.ts", data, state).hidden);
+  });
+
+  it("does not hide anything when visible is null", () => {
+    const data = attributes(graph, "src/a.ts");
+    const state: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: null };
+
+    assert.ok(!focusNode("src/a.ts", data, state).hidden);
+  });
+
+  it("hides an edge when either endpoint is filtered out", () => {
+    const onlySource: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/a.ts"]) };
+    const onlyTarget: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/b.ts"]) };
+    const neither: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/c.ts"]) };
+
+    assert.equal(focusEdge("src/a.ts", "src/b.ts", edgeAttributes, onlySource).hidden, true);
+    assert.equal(focusEdge("src/a.ts", "src/b.ts", edgeAttributes, onlyTarget).hidden, true);
+    assert.equal(focusEdge("src/a.ts", "src/b.ts", edgeAttributes, neither).hidden, true);
+  });
+
+  it("keeps an edge visible when both endpoints are visible", () => {
+    const both: FocusState = { neighborhood: null, hovered: null, labelAll: false, visible: new Set(["src/a.ts", "src/b.ts"]) };
+
+    assert.ok(!focusEdge("src/a.ts", "src/b.ts", edgeAttributes, both).hidden);
+  });
+
+  it("filtering takes precedence over the selected file's own emphasis", () => {
+    const state: FocusState = {
+      neighborhood: neighborhood(index, "src/b.ts"),
+      hovered: null,
+      labelAll: false,
+      visible: new Set(["src/a.ts"]),
+    };
+
+    assert.equal(focusNode("src/b.ts", attributes(graph, "src/b.ts"), state).hidden, true);
   });
 });
 
@@ -226,7 +279,7 @@ describe("domain separation", () => {
     const payload = toRenderGraph(dependencyGraph);
     const payloadCopy = structuredClone(payload);
     const visual = toGraphology(payload);
-    const state: FocusState = { neighborhood: neighborhood(buildGraphIndex(payload), "src/a.ts"), hovered: "src/b.ts", labelAll: false };
+    const state: FocusState = { neighborhood: neighborhood(buildGraphIndex(payload), "src/a.ts"), hovered: "src/b.ts", labelAll: false, visible: null };
 
     visual.forEachNode((id, data) => focusNode(id, data, state));
     visual.forEachEdge((id, data, source, target) => focusEdge(source, target, data, state));

@@ -11,6 +11,10 @@ export type FocusState = {
   hovered: string | null;
   // Whether every file is labelled, for very small graphs.
   labelAll: boolean;
+  // Files that pass the active graph filters, or null when no filter is
+  // active. A filtered-out node or edge is hidden rather than removed, so the
+  // layout never recomputes when filters change.
+  visible: Set<string> | null;
 };
 
 export function labelsAllFiles(nodeCount: number): boolean {
@@ -22,9 +26,10 @@ export type NodeDisplay = Omit<NodeAttributes, "label"> & {
   highlighted?: boolean;
   forceLabel?: boolean;
   zIndex?: number;
+  hidden?: boolean;
 };
 
-export type EdgeDisplay = EdgeAttributes & { zIndex?: number };
+export type EdgeDisplay = EdgeAttributes & { zIndex?: number; hidden?: boolean };
 
 export type NodeRole = "selected" | "neighbor" | "context";
 
@@ -37,7 +42,10 @@ export function nodeRole(neighborhood: Neighborhood, id: string): NodeRole {
 // the look of every node and hover only adds a label, so moving the pointer
 // never changes which files appear related.
 export function focusNode(id: string, data: NodeAttributes, state: FocusState): NodeDisplay {
-  const { neighborhood, hovered, labelAll } = state;
+  const { neighborhood, hovered, labelAll, visible } = state;
+  if (visible !== null && !visible.has(id)) {
+    return { ...data, hidden: true };
+  }
   if (neighborhood === null) {
     const base = labelAll ? { ...data, forceLabel: true } : data;
     return id === hovered ? hoveredNodeStyle(base) : base;
@@ -74,7 +82,10 @@ export function focusEdge(
   data: EdgeAttributes,
   state: FocusState,
 ): EdgeDisplay {
-  const { neighborhood, hovered } = state;
+  const { neighborhood, hovered, visible } = state;
+  if (visible !== null && (!visible.has(source) || !visible.has(target))) {
+    return { ...data, hidden: true };
+  }
   if (neighborhood === null) {
     return hovered !== null && (source === hovered || target === hovered) ? hoveredEdgeStyle(data) : data;
   }

@@ -2,29 +2,42 @@
 
 import { useId, useMemo, useState, type KeyboardEvent } from "react";
 
+import { withinVisible } from "@/lib/visualization/filters";
 import { searchFiles, type GraphIndex } from "@/lib/visualization/inspection";
 
 type FileSearchProps = {
   index: GraphIndex;
+  // Files that pass the active graph filters, or null when none are active.
+  // Results outside this set are not shown, so search never reaches a file
+  // that filters are currently hiding.
+  visible: Set<string> | null;
   onPick(id: string): void;
   // Escape with nothing left to close or clear.
   onEscape(): void;
 };
 
-export function FileSearch({ index, onPick, onEscape }: FileSearchProps) {
+export function FileSearch({ index, visible, onPick, onEscape }: FileSearchProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputId = useId();
   const resultsId = useId();
 
-  const results = useMemo(() => searchFiles(index, query), [index, query]);
+  const results = useMemo(
+    () => withinVisible(searchFiles(index, query), visible),
+    [index, query, visible],
+  );
   const showResults = open && query.trim() !== "";
 
   function pick(id: string) {
     onPick(id);
     setQuery("");
     setOpen(false);
+    setActive(0);
+  }
+
+  function clear() {
+    setQuery("");
     setActive(0);
   }
 
@@ -53,27 +66,43 @@ export function FileSearch({ index, onPick, onEscape }: FileSearchProps) {
       <label htmlFor={inputId} className="sr-only">
         Find a file
       </label>
-      <input
-        id={inputId}
-        type="text"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-          setActive(0);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={handleKeyDown}
-        placeholder="Find a file"
-        autoComplete="off"
-        spellCheck={false}
-        role="combobox"
-        aria-autocomplete="list"
-        aria-controls={resultsId}
-        aria-expanded={showResults}
-        className="h-9 w-full rounded-md border border-line bg-surface px-3 text-sm text-foreground placeholder:text-subtle transition-colors duration-150 hover:border-line-strong focus:border-line-strong focus:outline-2 focus:outline-offset-2 focus:outline-foreground/40"
-      />
+      <div className="relative">
+        <input
+          id={inputId}
+          type="text"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+            setActive(0);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onKeyDown={handleKeyDown}
+          placeholder="Find a file"
+          autoComplete="off"
+          spellCheck={false}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls={resultsId}
+          aria-expanded={showResults}
+          className="h-9 w-full rounded-md border border-line bg-surface px-3 pr-8 text-sm text-foreground placeholder:text-subtle transition-colors duration-150 hover:border-line-strong focus:border-line-strong focus:outline-2 focus:outline-offset-2 focus:outline-foreground/40"
+        />
+        {query !== "" && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={clear}
+            aria-label="Clear search"
+            className="absolute inset-y-0 right-1 grid w-7 place-items-center text-subtle transition-colors duration-150 hover:text-foreground"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        )}
+      </div>
       <div
         id={resultsId}
         hidden={!showResults}

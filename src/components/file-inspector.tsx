@@ -4,12 +4,16 @@ import { kindName, type FileDetails, type RelatedFile } from "@/lib/visualizatio
 
 type FileInspectorProps = {
   details: FileDetails;
+  // Files that pass the active graph filters, or null when none are active.
+  // Related files outside this set are still listed, since they are factual
+  // relationships, but are marked rather than shown as if visible.
+  visible: Set<string> | null;
   headingRef: Ref<HTMLHeadingElement>;
   onSelect(id: string): void;
   onClose(): void;
 };
 
-export function FileInspector({ details, headingRef, onSelect, onClose }: FileInspectorProps) {
+export function FileInspector({ details, visible, headingRef, onSelect, onClose }: FileInspectorProps) {
   return (
     <aside
       aria-label="Selected file"
@@ -58,6 +62,7 @@ export function FileInspector({ details, headingRef, onSelect, onClose }: FileIn
         description="Files this file imports, re-exports or requires."
         empty="No other analyzed file."
         files={details.references}
+        visible={visible}
         onSelect={onSelect}
       />
       <Relations
@@ -66,6 +71,7 @@ export function FileInspector({ details, headingRef, onSelect, onClose }: FileIn
         description="Files that import, re-export or require this file."
         empty="No analyzed file references it."
         files={details.referencedBy}
+        visible={visible}
         onSelect={onSelect}
       />
     </aside>
@@ -78,10 +84,11 @@ type RelationsProps = {
   description: string;
   empty: string;
   files: RelatedFile[];
+  visible: Set<string> | null;
   onSelect(id: string): void;
 };
 
-function Relations({ title, count, description, empty, files, onSelect }: RelationsProps) {
+function Relations({ title, count, description, empty, files, visible, onSelect }: RelationsProps) {
   return (
     <section className="border-b border-line py-3 last:border-b-0">
       <div className="px-4">
@@ -94,24 +101,41 @@ function Relations({ title, count, description, empty, files, onSelect }: Relati
         <p className="mt-2 px-4 text-xs text-subtle">{empty}</p>
       ) : (
         <ul className="mt-1.5">
-          {files.map((file) => (
-            <li key={file.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(file.id)}
-                title={file.id}
-                className="block w-full px-4 py-1.5 text-left transition-colors duration-150 hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/40"
-              >
-                <span className="flex items-baseline gap-2">
-                  <span className="truncate font-mono text-[13px] text-foreground">{file.name}</span>
-                  {!(file.kinds.length === 1 && file.kinds[0] === "import") && (
-                    <span className="shrink-0 text-xs text-subtle">{file.kinds.map(kindName).join(", ")}</span>
-                  )}
-                </span>
-                <span className="block truncate font-mono text-xs text-subtle">{file.directory || "repository root"}</span>
-              </button>
-            </li>
-          ))}
+          {files.map((file) => {
+            const hiddenByFilters = visible !== null && !visible.has(file.id);
+            return (
+              <li key={file.id}>
+                {hiddenByFilters ? (
+                  <div className="px-4 py-1.5 opacity-60" title={file.id}>
+                    <span className="flex items-baseline gap-2">
+                      <span className="truncate font-mono text-[13px] text-muted">{file.name}</span>
+                      <span className="shrink-0 text-xs text-subtle">hidden by filters</span>
+                    </span>
+                    <span className="block truncate font-mono text-xs text-subtle">
+                      {file.directory || "repository root"}
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelect(file.id)}
+                    title={file.id}
+                    className="block w-full px-4 py-1.5 text-left transition-colors duration-150 hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/40"
+                  >
+                    <span className="flex items-baseline gap-2">
+                      <span className="truncate font-mono text-[13px] text-foreground">{file.name}</span>
+                      {!(file.kinds.length === 1 && file.kinds[0] === "import") && (
+                        <span className="shrink-0 text-xs text-subtle">{file.kinds.map(kindName).join(", ")}</span>
+                      )}
+                    </span>
+                    <span className="block truncate font-mono text-xs text-subtle">
+                      {file.directory || "repository root"}
+                    </span>
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
