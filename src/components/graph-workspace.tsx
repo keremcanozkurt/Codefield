@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Constellation, type ConstellationHandle } from "@/components/constellation";
 import { FileInspector } from "@/components/file-inspector";
 import { FileSearch } from "@/components/file-search";
+import { RepositoryOverview } from "@/components/repository-overview";
+import { deriveRepositoryInsights } from "@/lib/graph/insights";
 import { buildGraphIndex, describeFile, neighborhood, selectionFor } from "@/lib/visualization/inspection";
 import type { RenderGraph } from "@/lib/visualization/types";
 
@@ -21,20 +23,29 @@ export function GraphWorkspace({ graph, label }: GraphWorkspaceProps) {
   const selected = selection?.graph === graph ? selectionFor(index, selection.id) : null;
   const focus = useMemo(() => neighborhood(index, selected), [index, selected]);
   const details = useMemo(() => describeFile(index, selected), [index, selected]);
+  const insights = useMemo(() => deriveRepositoryInsights(graph), [graph]);
 
   const constellationRef = useRef<ConstellationHandle>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const focusHeadingRef = useRef(false);
+  const overviewHeadingRef = useRef<HTMLHeadingElement>(null);
+  // Where keyboard focus should go after the side panel changes, since the
+  // button that caused the change is no longer rendered.
+  const panelFocusRef = useRef<"inspector" | "overview" | null>(null);
 
   const select = useCallback(
     (id: string | null) => setSelection(id === null ? null : { graph, id }),
     [graph],
   );
 
-  function jumpTo(id: string, fromInspector = false) {
+  function jumpTo(id: string, fromPanel = false) {
     select(id);
     constellationRef.current?.focus(id);
-    focusHeadingRef.current = fromInspector;
+    panelFocusRef.current = fromPanel ? "inspector" : null;
+  }
+
+  function closeInspector() {
+    select(null);
+    panelFocusRef.current = "overview";
   }
 
   function resetView() {
@@ -42,12 +53,11 @@ export function GraphWorkspace({ graph, label }: GraphWorkspaceProps) {
     constellationRef.current?.resetView();
   }
 
-  // Choosing a related file replaces the list the focused button was in, so
-  // keyboard focus moves to the new file's name instead of being dropped.
   useEffect(() => {
-    if (details === null || !focusHeadingRef.current) return;
-    focusHeadingRef.current = false;
-    headingRef.current?.focus();
+    const target = panelFocusRef.current;
+    if (target === null || (target === "inspector") !== (details !== null)) return;
+    panelFocusRef.current = null;
+    (target === "inspector" ? headingRef : overviewHeadingRef).current?.focus();
   }, [details]);
 
   useEffect(() => {
@@ -89,12 +99,18 @@ export function GraphWorkspace({ graph, label }: GraphWorkspaceProps) {
             onSelect={select}
           />
         </div>
-        {details !== null && (
+        {details !== null ? (
           <FileInspector
             details={details}
             headingRef={headingRef}
             onSelect={(id) => jumpTo(id, true)}
-            onClose={() => select(null)}
+            onClose={closeInspector}
+          />
+        ) : (
+          <RepositoryOverview
+            insights={insights}
+            headingRef={overviewHeadingRef}
+            onSelect={(id) => jumpTo(id, true)}
           />
         )}
       </div>

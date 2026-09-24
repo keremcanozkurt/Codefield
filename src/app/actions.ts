@@ -18,9 +18,6 @@ export type DiscoveryResult =
         fullName: string;
         defaultBranch: string;
         entryCount: number;
-        sourceFileCount: number;
-        relationshipCount: number;
-        edgeCount: number;
         skippedCount: number;
         limited: boolean;
       };
@@ -60,9 +57,6 @@ export async function discoverRepository(input: unknown): Promise<DiscoveryResul
       fullName: metadata.fullName,
       defaultBranch: metadata.defaultBranch,
       entryCount: tree.entries.length,
-      sourceFileCount: sources.data.files.length,
-      relationshipCount: analysis.stats.relationships,
-      edgeCount: graph.stats.edges,
       skippedCount: selection.skipped.length + sources.data.skipped.length,
       limited: selection.limited,
     },

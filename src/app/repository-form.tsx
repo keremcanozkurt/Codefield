@@ -84,9 +84,6 @@ export function RepositoryForm() {
               {" on "}
               <span className="font-mono text-foreground">{result.repository.defaultBranch}</span>
               {` · ${formatCount(result.repository.entryCount, "tree entry", "tree entries")}`}
-              {` · ${formatCount(result.repository.sourceFileCount, "source file", "source files")}`}
-              {` · ${formatCount(result.repository.relationshipCount, "internal relationship", "internal relationships")}`}
-              {` · ${formatCount(result.repository.edgeCount, "graph edge", "graph edges")}`}
               {result.repository.skippedCount > 0 &&
                 ` · ${result.repository.skippedCount.toLocaleString("en-US")} skipped`}
               {result.repository.limited &&
