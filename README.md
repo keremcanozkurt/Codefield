@@ -12,6 +12,7 @@ Codefield fetches a public GitHub repository, parses its JavaScript and TypeScri
 - JS/TS import, re-export, dynamic import and require relationship extraction
 - constellation visualization with directory-aware, deterministic layout
 - file inspector (path, size, language, references and referenced-by)
+- impact tracing: for a selected file, the files that depend on it directly or through other files, grouped by dependency depth
 - repository overview (totals, most-referenced files, busiest directories)
 - file search and graph filters (language, directory, connectivity, minimum degree)
 - high-resolution PNG export of the current view
@@ -57,6 +58,7 @@ builds and runs a production server.
 - JavaScript and TypeScript (`.ts`, `.tsx`, `.js`, `.jsx`) only
 - static import analysis only; relationships that only exist at runtime (dynamically constructed paths, non-literal `require`/`import()` arguments, package `exports` maps, workspace packages, bundler-specific aliases) are not resolved
 - an import that resolves to an external package is not added to the graph — only repository-internal relationships are shown
+- impact tracing follows the same static relationships: it lists files that could be affected by a change, not files that will be, and cannot see dependencies the analysis misses
 - repository archives over 50 MiB are not supported, and at most 500 source files are analyzed per repository
 
 ## Tech

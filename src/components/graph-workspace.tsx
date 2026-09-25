@@ -16,7 +16,9 @@ import {
   visibleNodeIds,
   type FilterState,
 } from "@/lib/visualization/filters";
+import { describeImpact, traceImpact } from "@/lib/visualization/impact";
 import { buildGraphIndex, describeFile, neighborhood, selectionFor } from "@/lib/visualization/inspection";
+import { selectFile, setImpactMode, type Selection } from "@/lib/visualization/selection";
 import type { RenderGraph } from "@/lib/visualization/types";
 
 type GraphWorkspaceProps = {
@@ -31,9 +33,7 @@ type ExportState = "idle" | "pending" | "error";
 
 export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorkspaceProps) {
   const index = useMemo(() => buildGraphIndex(graph), [graph]);
-  // The selection remembers the graph it was made in, so a new analysis starts
-  // without one even if a file with the same path exists.
-  const [selection, setSelection] = useState<{ graph: RenderGraph; id: string } | null>(null);
+  const [selection, setSelection] = useState<Selection<RenderGraph> | null>(null);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [exportState, setExportState] = useState<ExportState>("idle");
 
@@ -46,6 +46,13 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
   const selected = resolveSelection(rawSelected, visibleIds);
   const focus = useMemo(() => neighborhood(index, selected), [index, selected]);
   const details = useMemo(() => describeFile(index, selected), [index, selected]);
+  const impactActive = selected !== null && selection?.impact === true;
+  // Traced over the full graph: filters only decide which affected files show.
+  const impact = useMemo(() => (impactActive ? traceImpact(index, selected) : null), [index, selected, impactActive]);
+  const impactDetails = useMemo(
+    () => (impact === null ? null : describeImpact(index, impact, visibleIds)),
+    [index, impact, visibleIds],
+  );
   const insights = useMemo(() => deriveRepositoryInsights(graph), [graph]);
   const directories = useMemo(() => directoryOptions(index), [index]);
   const counts = useMemo(() => filterCounts(index, visibleIds), [index, visibleIds]);
@@ -58,9 +65,10 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
   const panelFocusRef = useRef<"inspector" | "overview" | null>(null);
 
   const select = useCallback(
-    (id: string | null) => setSelection(id === null ? null : { graph, id }),
+    (id: string | null) => setSelection((current) => selectFile(current, graph, id)),
     [graph],
   );
+  const setImpact = useCallback((on: boolean) => setSelection((current) => setImpactMode(current, on)), []);
 
   function jumpTo(id: string, fromPanel = false) {
     select(id);
@@ -95,11 +103,13 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.defaultPrevented || isEditable(event.target)) return;
-      select(null);
+      // Leaves impact mode first, then the selection on a second press.
+      if (impactActive) setImpact(false);
+      else select(null);
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [select]);
+  }, [select, setImpact, impactActive]);
 
   if (graph.nodes.length === 0) {
     return (
@@ -146,6 +156,7 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
             graph={graph}
             label={label}
             neighborhood={focus}
+            impact={impact}
             visible={visibleIds}
             onSelect={select}
           />
@@ -153,10 +164,13 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
         {details !== null ? (
           <FileInspector
             details={details}
+            impact={impactDetails}
             visible={visibleIds}
             headingRef={headingRef}
             onSelect={(id) => jumpTo(id, true)}
             onClose={closeInspector}
+            onTraceImpact={() => setImpact(true)}
+            onExitImpact={() => setImpact(false)}
           />
         ) : (
           <RepositoryOverview

@@ -17,6 +17,7 @@ import {
   type FocusState,
 } from "@/lib/visualization/focus";
 import { toGraphology, type VisualGraph } from "@/lib/visualization/graphology";
+import type { Impact } from "@/lib/visualization/impact";
 import type { Neighborhood } from "@/lib/visualization/inspection";
 import { RENDERER_SETTINGS } from "@/lib/visualization/settings";
 import { SURFACE } from "@/lib/visualization/theme";
@@ -35,6 +36,8 @@ type ConstellationProps = {
   graph: RenderGraph;
   label: string;
   neighborhood: Neighborhood | null;
+  // Set while impact mode is on for the selected file.
+  impact: Impact | null;
   // Files that pass the active graph filters, or null when none are active.
   visible: Set<string> | null;
   onSelect(id: string | null): void;
@@ -51,10 +54,11 @@ type Session = {
 // centres it, and "closer" also zooms in.
 type CameraMove = "reveal" | "center" | "closer";
 
-export function Constellation({ graph, label, neighborhood, visible, onSelect, ref }: ConstellationProps) {
+export function Constellation({ graph, label, neighborhood, impact, visible, onSelect, ref }: ConstellationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const neighborhoodRef = useRef(neighborhood);
+  const impactRef = useRef(impact);
   const visibleRef = useRef(visible);
   const onSelectRef = useRef(onSelect);
   // A camera move waiting for its selection to be applied, since the
@@ -109,6 +113,7 @@ export function Constellation({ graph, label, neighborhood, visible, onSelect, r
         // the reducers read it on every refresh.
         const state: FocusState = {
           neighborhood: neighborhoodRef.current,
+          impact: impactRef.current,
           hovered: null,
           labelAll: labelsAllFiles(visual.order),
           visible: visibleRef.current,
@@ -197,6 +202,15 @@ export function Constellation({ graph, label, neighborhood, visible, onSelect, r
       moveCamera(session, pending.id, pending.move);
     }
   }, [neighborhood]);
+
+  // Impact mode only restyles nodes and edges; positions and the camera stay.
+  useEffect(() => {
+    impactRef.current = impact;
+    const session = sessionRef.current;
+    if (session === null) return;
+    session.state.impact = impact;
+    session.sigma.refresh();
+  }, [impact]);
 
   // Filters only change which nodes and edges the reducers hide: the camera
   // and the underlying layout are left alone.

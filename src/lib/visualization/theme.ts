@@ -56,6 +56,26 @@ export const FOCUS = {
   labelledGraphSize: 12,
 } as const;
 
+// Appearance in impact mode. Depth is shown through brightness only: files
+// move from slightly lighter than their own color at depth 1 towards the
+// background as depth grows, but never as far as FOCUS.contextFade, so every
+// potentially affected file stays distinguishable from unaffected ones.
+export const IMPACT = {
+  // Strength is 1 at depth 1 and keeps this share per further level, down to
+  // minStrength.
+  depthFalloff: 0.65,
+  minStrength: 0.25,
+  // Share of white mixed into a file at full strength.
+  lighten: 0.3,
+  // Share of the background mixed into a file at zero strength.
+  fade: 0.5,
+  edgeMinOpacity: 0.2,
+  edgeMaxOpacity: 0.6,
+  // Potentially affected files always show their labels when there are at
+  // most this many; otherwise only direct dependents do, under the same limit.
+  labelledFiles: 16,
+} as const;
+
 export const LABEL = {
   font: "ui-sans-serif, system-ui, sans-serif",
   size: 11,

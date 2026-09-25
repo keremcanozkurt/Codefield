@@ -1,7 +1,8 @@
+import { propagationDepth, type Impact } from "./impact.ts";
 import type { Neighborhood } from "./inspection.ts";
 import type { Frame } from "./layout.ts";
 import { blend, hoveredEdgeStyle, hoveredNodeStyle, premultiplied } from "./mapping.ts";
-import { EDGE, FOCUS, SURFACE } from "./theme.ts";
+import { EDGE, FOCUS, IMPACT, SURFACE } from "./theme.ts";
 import type { EdgeAttributes, NodeAttributes } from "./types.ts";
 
 // What the renderer reducers need besides the stored attributes. Kept outside
@@ -15,6 +16,9 @@ export type FocusState = {
   // active. A filtered-out node or edge is hidden rather than removed, so the
   // layout never recomputes when filters change.
   visible: Set<string> | null;
+  // Set while impact mode is on for the selected file; it then decides the
+  // look of every node and edge instead of the neighbourhood.
+  impact?: Impact | null;
 };
 
 export function labelsAllFiles(nodeCount: number): boolean {
@@ -46,6 +50,7 @@ export function focusNode(id: string, data: NodeAttributes, state: FocusState): 
   if (visible !== null && !visible.has(id)) {
     return { ...data, hidden: true };
   }
+  if (state.impact) return impactNode(id, data, state.impact, id === hovered, labelAll);
   if (neighborhood === null) {
     const base = labelAll ? { ...data, forceLabel: true } : data;
     return id === hovered ? hoveredNodeStyle(base) : base;
@@ -54,13 +59,7 @@ export function focusNode(id: string, data: NodeAttributes, state: FocusState): 
   const isHovered = id === hovered;
   switch (nodeRole(neighborhood, id)) {
     case "selected":
-      return {
-        ...data,
-        size: data.size * FOCUS.selectedSizeScale,
-        color: blend(data.color, [255, 255, 255], FOCUS.selectedLighten),
-        highlighted: true,
-        zIndex: 2,
-      };
+      return selectedNode(data);
     case "neighbor":
       return {
         ...data,
@@ -70,10 +69,24 @@ export function focusNode(id: string, data: NodeAttributes, state: FocusState): 
         zIndex: 1,
       };
     case "context":
-      return isHovered
-        ? { ...data, highlighted: true, zIndex: 0 }
-        : { ...data, color: blend(data.color, SURFACE, FOCUS.contextFade), label: null, zIndex: 0 };
+      return contextNode(data, isHovered);
   }
+}
+
+function selectedNode(data: NodeAttributes): NodeDisplay {
+  return {
+    ...data,
+    size: data.size * FOCUS.selectedSizeScale,
+    color: blend(data.color, [255, 255, 255], FOCUS.selectedLighten),
+    highlighted: true,
+    zIndex: 2,
+  };
+}
+
+function contextNode(data: NodeAttributes, isHovered: boolean): NodeDisplay {
+  return isHovered
+    ? { ...data, highlighted: true, zIndex: 0 }
+    : { ...data, color: blend(data.color, SURFACE, FOCUS.contextFade), label: null, zIndex: 0 };
 }
 
 export function focusEdge(
@@ -86,17 +99,62 @@ export function focusEdge(
   if (visible !== null && (!visible.has(source) || !visible.has(target))) {
     return { ...data, hidden: true };
   }
+  if (state.impact) {
+    const depth = propagationDepth(state.impact, source, target);
+    return depth === null ? contextEdge(data) : impactEdge(data, depth);
+  }
   if (neighborhood === null) {
     return hovered !== null && (source === hovered || target === hovered) ? hoveredEdgeStyle(data) : data;
   }
   if (source === neighborhood.selected || target === neighborhood.selected) {
     return { ...hoveredEdgeStyle(data), zIndex: 1 };
   }
+  return contextEdge(data);
+}
+
+function contextEdge(data: EdgeAttributes): EdgeDisplay {
   return {
     ...data,
     size: EDGE.minSize,
     color: premultiplied(EDGE.color, FOCUS.contextEdgeOpacity),
     zIndex: 0,
+  };
+}
+
+// 1 for direct dependents, lower for each further level of dependency depth.
+export function impactStrength(depth: number): number {
+  if (!(depth >= 1)) return 0;
+  return Math.max(IMPACT.minStrength, IMPACT.depthFalloff ** (depth - 1));
+}
+
+// The impact source looks like a selected file. Potentially affected files keep
+// their own color, lightened or faded by depth; everything else is faded like
+// the context of a selection. Hover only adds a label, as with a selection.
+function impactNode(id: string, data: NodeAttributes, impact: Impact, isHovered: boolean, labelAll: boolean): NodeDisplay {
+  if (id === impact.source) return selectedNode(data);
+  const depth = impact.depths.get(id);
+  if (depth === undefined) return contextNode(data, isHovered);
+  const strength = impactStrength(depth);
+  const direct = impact.levels[0].length;
+  return {
+    ...data,
+    color: blend(blend(data.color, [255, 255, 255], IMPACT.lighten * strength), SURFACE, IMPACT.fade * (1 - strength)),
+    forceLabel:
+      labelAll ||
+      impact.depths.size <= IMPACT.labelledFiles ||
+      (depth === 1 && direct <= IMPACT.labelledFiles),
+    highlighted: isHovered,
+    zIndex: 1,
+  };
+}
+
+function impactEdge(data: EdgeAttributes, depth: number): EdgeDisplay {
+  const strength = impactStrength(depth);
+  return {
+    ...data,
+    size: EDGE.minSize + (EDGE.hoverSize - EDGE.minSize) * strength,
+    color: premultiplied(EDGE.hoverColor, IMPACT.edgeMinOpacity + (IMPACT.edgeMaxOpacity - IMPACT.edgeMinOpacity) * strength),
+    zIndex: 1,
   };
 }
 
