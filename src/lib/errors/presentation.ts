@@ -4,7 +4,7 @@ import type { GitHubError, GitHubErrorCode, RateLimit } from "../github/types.ts
 // separate from GitHubError so error copy lives in one place rather than
 // spreading strings across components, and so nothing server-internal (raw
 // response bodies, the GitHub token, endpoint URLs) can reach a component by
-// accident: only these four fields cross the boundary.
+// accident: only these fields cross the boundary.
 export type PresentedError = {
   title: string;
   message: string;
@@ -12,6 +12,8 @@ export type PresentedError = {
   // ISO timestamp. Only set for a rate limit with a known reset time; the
   // component formats it in the viewer's local time.
   retryAt?: string;
+  // A link that resolves the problem, such as connecting GitHub.
+  action?: { label: string; href: string };
 };
 
 const COPY: Record<Exclude<GitHubErrorCode, "rate_limited">, Omit<PresentedError, "retryAt">> = {
@@ -22,7 +24,7 @@ const COPY: Record<Exclude<GitHubErrorCode, "rate_limited">, Omit<PresentedError
   },
   repository_inaccessible: {
     title: "Private or unavailable repository",
-    message: "This repository is private or unavailable. Codefield currently analyzes public repositories only.",
+    message: "GitHub denied access to this repository.",
     retryable: false,
   },
   unauthorized: {
@@ -91,6 +93,60 @@ function presentRateLimit(rateLimit: RateLimit | undefined): PresentedError {
     return { title, message: "Try again later.", retryable: true, retryAt: rateLimit.resetAt };
   }
   return { title, message: "Try again later.", retryable: true };
+}
+
+// Problems with a user's GitHub connection, found while analyzing a
+// repository the anonymous request could not see. None of this copy says
+// whether the repository exists: GitHub itself does not say.
+export type ConnectionProblem = "not_connected" | "expired" | "revoked" | "unavailable";
+
+export function presentConnectionProblem(problem: ConnectionProblem, connectHref: string): PresentedError {
+  const action = { label: "Connect GitHub", href: connectHref };
+  switch (problem) {
+    case "not_connected":
+      return {
+        title: "Repository not found",
+        message: "Check the URL. If the repository is private, connect GitHub to let Codefield read it.",
+        retryable: false,
+        action,
+      };
+    case "expired":
+      return {
+        title: "GitHub connection expired",
+        message: "Connect GitHub again to analyze private repositories.",
+        retryable: false,
+        action,
+      };
+    case "revoked":
+      return {
+        title: "GitHub connection no longer valid",
+        message: "GitHub no longer accepts Codefield's authorization. Connect GitHub again to continue.",
+        retryable: false,
+        action,
+      };
+    case "unavailable":
+      return COPY.network_error;
+  }
+}
+
+export type AccessProblem = "app_not_installed" | "repository_not_granted";
+
+export function presentAccessProblem(problem: AccessProblem, manageHref: string): PresentedError {
+  if (problem === "app_not_installed") {
+    return {
+      title: "Codefield is not installed on GitHub",
+      message: "Install the Codefield GitHub App and choose the repositories it may read.",
+      retryable: false,
+      action: { label: "Install on GitHub", href: manageHref },
+    };
+  }
+  return {
+    title: "Codefield cannot read this repository",
+    message:
+      "The repository may not exist, your GitHub account may not have access to it, or it is not one of the repositories granted to Codefield.",
+    retryable: false,
+    action: { label: "Manage access", href: manageHref },
+  };
 }
 
 // A repository whose tree contains no entries at all. Shown instead of an

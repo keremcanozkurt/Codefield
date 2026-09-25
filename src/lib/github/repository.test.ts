@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { FetchLike } from "./client.ts";
-import { loadRepository } from "./repository.ts";
+import { fetchRepositoryMetadata, loadRepository } from "./repository.ts";
 
 const METADATA_URL = "https://api.github.com/repos/vercel/ms";
 const TREE_URL = "https://api.github.com/repos/vercel/ms/git/trees/main?recursive=1";
@@ -369,5 +369,17 @@ describe("loadRepository", () => {
 
       assert.equal(error?.code, "upstream_error");
     });
+  });
+});
+
+describe("fetchRepositoryMetadata", () => {
+  it("returns a private repository only when the caller allows it", async () => {
+    const github = fakeGitHub({ [METADATA_URL]: () => json({ ...metadataBody, private: true }) });
+
+    const rejected = await fetchRepositoryMetadata(ref, { fetch: github.fetch, token: "t" });
+    const allowed = await fetchRepositoryMetadata(ref, { fetch: github.fetch, token: "t", allowPrivate: true });
+
+    assert.equal(rejected.ok, false);
+    assert.equal(allowed.ok && allowed.data.isPrivate, true);
   });
 });

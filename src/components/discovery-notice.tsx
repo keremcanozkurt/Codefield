@@ -7,12 +7,13 @@ type DiscoveryNoticeProps = {
   // sentence naming the time, formatted in the viewer's own timezone.
   retryAt?: string;
   retry?: { onClick(): void; disabled?: boolean };
+  action?: { label: string; href: string };
 };
 
 // This notice only ever mounts after a client-side analysis result arrives,
 // never as part of the server-rendered page, so formatting retryAt in the
 // viewer's local timezone during render cannot cause a hydration mismatch.
-export function DiscoveryNotice({ tone, title, message, detail, retryAt, retry }: DiscoveryNoticeProps) {
+export function DiscoveryNotice({ tone, title, message, detail, retryAt, retry, action }: DiscoveryNoticeProps) {
   const localTime = retryAt ? formatLocalTime(retryAt) : null;
   const body = retryAt ? (localTime ? `You can try again after ${localTime}.` : "You can try again once the limit resets.") : message;
   const toneClass = tone === "error" ? "border-danger/30 text-danger" : "border-warning/30 text-warning";
@@ -28,6 +29,14 @@ export function DiscoveryNotice({ tone, title, message, detail, retryAt, retry }
         <p className="mt-0.5 text-muted">{body}</p>
         {detail && <p className="mt-0.5 text-xs text-subtle">{detail}</p>}
       </div>
+      {action && (
+        <a
+          href={action.href}
+          className="flex h-8 shrink-0 items-center rounded-md border border-line px-3 text-xs font-medium text-foreground transition-colors duration-150 hover:border-line-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40"
+        >
+          {action.label}
+        </a>
+      )}
       {retry && (
         <button
           type="button"

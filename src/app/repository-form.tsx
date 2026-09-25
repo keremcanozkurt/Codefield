@@ -16,8 +16,8 @@ type Phase =
 
 type Identity = { fullName: string; defaultBranch: string };
 
-export function RepositoryForm() {
-  const [value, setValue] = useState("");
+export function RepositoryForm({ initialUrl = "" }: { initialUrl?: string }) {
+  const [value, setValue] = useState(initialUrl);
   const [touched, setTouched] = useState(false);
   const [phase, setPhase] = useState<Phase>({ status: "idle" });
   const [, startTransition] = useTransition();
@@ -168,6 +168,7 @@ export function RepositoryForm() {
             title={result.error.title}
             message={result.error.message}
             retryAt={result.error.retryAt}
+            action={result.error.action}
             retry={result.error.retryable ? { onClick: retry, disabled: isLoading } : undefined}
           />
         </div>

@@ -27,9 +27,15 @@ export async function loadRepository(
   return { ok: true, data: { metadata: metadata.data, tree: tree.data } };
 }
 
+type MetadataOptions = GitHubRequestOptions & {
+  // Private repositories are rejected unless the caller has decided the
+  // credentials in use may read them.
+  allowPrivate?: boolean;
+};
+
 export async function fetchRepositoryMetadata(
   ref: RepositoryRef,
-  options: GitHubRequestOptions = {},
+  { allowPrivate = false, ...options }: MetadataOptions = {},
 ): Promise<GitHubResult<RepositoryMetadata>> {
   const response = await requestGitHub(
     `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}`,
@@ -40,7 +46,7 @@ export async function fetchRepositoryMetadata(
   const metadata = normalizeMetadata(response.data);
   if (metadata === null) return { ok: false, error: malformedResponse() };
 
-  if (metadata.isPrivate) {
+  if (metadata.isPrivate && !allowPrivate) {
     return {
       ok: false,
       error: {

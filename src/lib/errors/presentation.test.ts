@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { GitHubError, GitHubErrorCode, RateLimit } from "../github/types.ts";
-import { EMPTY_REPOSITORY, NO_SUPPORTED_SOURCE_FILES, presentGitHubError } from "./presentation.ts";
+import {
+  EMPTY_REPOSITORY,
+  NO_SUPPORTED_SOURCE_FILES,
+  presentAccessProblem,
+  presentConnectionProblem,
+  presentGitHubError,
+} from "./presentation.ts";
 
 const CODES: GitHubErrorCode[] = [
   "not_found",
@@ -117,5 +123,41 @@ describe("non-error notices", () => {
   it("describes a repository with no supported files without calling it an error", () => {
     assert.ok(!NO_SUPPORTED_SOURCE_FILES.title.toLowerCase().includes("error"));
     assert.ok(NO_SUPPORTED_SOURCE_FILES.message.length > 0);
+  });
+});
+
+describe("connection and access problems", () => {
+  const connect = "/api/github/connect?repository=https%3A%2F%2Fgithub.com%2Focto%2Fdemo";
+  const manage = "https://github.com/apps/codefield/installations/new";
+
+  it("offers to connect GitHub for connection problems", () => {
+    for (const problem of ["not_connected", "expired", "revoked"] as const) {
+      const presented = presentConnectionProblem(problem, connect);
+      assert.deepEqual(presented.action, { label: "Connect GitHub", href: connect }, problem);
+      assert.equal(presented.retryable, false);
+    }
+  });
+
+  it("treats an unreachable GitHub as retryable, without an action", () => {
+    const presented = presentConnectionProblem("unavailable", connect);
+
+    assert.equal(presented.retryable, true);
+    assert.equal(presented.action, undefined);
+  });
+
+  it("points access problems at GitHub's installation page", () => {
+    assert.equal(presentAccessProblem("app_not_installed", manage).action?.href, manage);
+    assert.equal(presentAccessProblem("repository_not_granted", manage).action?.href, manage);
+  });
+
+  it("never mentions tokens or credentials", () => {
+    const all = [
+      ...(["not_connected", "expired", "revoked", "unavailable"] as const).map((p) => presentConnectionProblem(p, connect)),
+      ...(["app_not_installed", "repository_not_granted"] as const).map((p) => presentAccessProblem(p, manage)),
+    ];
+    for (const presented of all) {
+      const text = `${presented.title} ${presented.message}`.toLowerCase();
+      assert.ok(!text.includes("token") && !text.includes("credential"), text);
+    }
   });
 });
