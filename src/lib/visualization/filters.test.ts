@@ -11,6 +11,7 @@ import {
   filterCounts,
   isDefaultFilters,
   isEdgeVisible,
+  languageOptions,
   resolveSelection,
   visibleNodeIds,
   withinVisible,
@@ -303,5 +304,25 @@ describe("filter state helpers", () => {
     assert.ok(isDefaultFilters(DEFAULT_FILTERS));
     assert.ok(!isDefaultFilters(filters({ directory: "src/lib" })));
     assert.equal(DEFAULT_FILTERS.directory, ALL_DIRECTORIES);
+  });
+});
+
+describe("language filters for any language", () => {
+  const graph = graphOf(
+    [node("api/main.py", "python"), node("api/db.py", "python"), node("core/src/lib.rs", "rust"), node("web/app.ts", "typescript"), node("cli/main.go", "go")],
+    [edge("api/main.py", "api/db.py")],
+  );
+  const index = buildGraphIndex(graph);
+
+  it("offers only the languages present, in registry order", () => {
+    assert.deepEqual(languageOptions(index), ["typescript", "python", "go", "rust"]);
+    assert.deepEqual(languageOptions(buildGraphIndex(graphOf([node("a.c", "c"), node("b.cpp", "cpp")]))), ["c", "cpp"]);
+  });
+
+  it("filters by any language and combines with other filters", () => {
+    assert.deepEqual([...visibleNodeIds(index, { ...DEFAULT_FILTERS, language: "python" })!].sort(), ["api/db.py", "api/main.py"]);
+    assert.deepEqual([...visibleNodeIds(index, { ...DEFAULT_FILTERS, language: "rust" })!], ["core/src/lib.rs"]);
+    assert.deepEqual([...visibleNodeIds(index, { ...DEFAULT_FILTERS, language: "python", minDegree: 1 })!].sort(), ["api/db.py", "api/main.py"]);
+    assert.deepEqual([...visibleNodeIds(index, { ...DEFAULT_FILTERS, language: "swift" })!], []);
   });
 });

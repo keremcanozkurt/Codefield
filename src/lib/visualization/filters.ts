@@ -1,8 +1,8 @@
 import { compareStrings } from "../analysis/paths.ts";
-import type { SourceLanguage } from "../source-files.ts";
+import { compareLanguages, type LanguageId } from "../languages/registry.ts";
 import type { GraphIndex } from "./inspection.ts";
 
-export type LanguageFilter = "all" | SourceLanguage;
+export type LanguageFilter = "all" | LanguageId;
 export type ConnectivityFilter = "all" | "connected" | "isolated";
 
 export type FilterState = {
@@ -47,6 +47,14 @@ export function directoryOptions(index: GraphIndex): string[] {
   const directories = new Set<string>();
   for (const node of index.nodeById.values()) directories.add(node.directory);
   return [...directories].sort(compareStrings);
+}
+
+// Languages present in the graph, in registry order. Like the directory list,
+// it reflects the full repository, not the filtered view.
+export function languageOptions(index: GraphIndex): LanguageId[] {
+  const languages = new Set<LanguageId>();
+  for (const node of index.nodeById.values()) languages.add(node.language);
+  return [...languages].sort(compareLanguages);
 }
 
 // Nodes that pass every active filter. Returns null when no filter is active,

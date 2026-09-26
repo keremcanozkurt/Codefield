@@ -1,7 +1,7 @@
-import type { ReferenceKind } from "../analysis/imports.ts";
-import type { SourceExtension, SourceLanguage } from "../source-files.ts";
+import type { KindCounts } from "../analysis/kinds.ts";
+import type { LanguageId, SourceExtension } from "../languages/registry.ts";
 
-export type KindCounts = Record<ReferenceKind, number>;
+export type { KindCounts } from "../analysis/kinds.ts";
 
 export type GraphNode = {
   // The repository-relative path.
@@ -11,7 +11,7 @@ export type GraphNode = {
   // "" for files at the repository root.
   directory: string;
   extension: SourceExtension;
-  language: SourceLanguage;
+  language: LanguageId;
   size: number;
   // Counted in unique graph edges, not in relationships. See build.ts.
   incoming: number;
@@ -38,6 +38,8 @@ export type DirectorySummary = {
   totalBytes: number;
 };
 
+export type LanguageCounts = Partial<Record<LanguageId, number>>;
+
 export type DependencyGraph = {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -49,6 +51,7 @@ export type DependencyGraph = {
     relationships: number;
     totalBytes: number;
     directories: number;
-    languages: Record<SourceLanguage, number>;
+    // Only languages with at least one file.
+    languages: LanguageCounts;
   };
 };

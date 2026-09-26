@@ -1,6 +1,6 @@
-import type { ReferenceKind } from "../analysis/imports.ts";
+import { REFERENCE_KINDS, type ReferenceKind } from "../analysis/kinds.ts";
 import { compareStrings } from "../analysis/paths.ts";
-import type { SourceLanguage } from "../source-files.ts";
+import { languageName } from "../languages/registry.ts";
 import { fileName } from "./mapping.ts";
 import type { RenderGraph, RenderNode } from "./types.ts";
 
@@ -53,7 +53,7 @@ export function buildGraphIndex(graph: RenderGraph): GraphIndex {
       [...relations].map(([id, related]) => [
         id,
         [...related]
-          .map(([other, kinds]) => ({ id: other, kinds: KIND_ORDER.filter((kind) => kinds.has(kind)) }))
+          .map(([other, kinds]) => ({ id: other, kinds: REFERENCE_KINDS.filter((kind) => kinds.has(kind)) }))
           .sort((a, b) => compareStrings(path(a.id), path(b.id)) || compareStrings(a.id, b.id)),
       ]),
     );
@@ -74,8 +74,6 @@ export function buildGraphIndex(graph: RenderGraph): GraphIndex {
 
   return { nodeById, outgoing: toLists(outgoing), incoming: toLists(incoming), entries };
 }
-
-const KIND_ORDER: readonly ReferenceKind[] = ["import", "reexport", "dynamic_import", "require"];
 
 function addRelation(
   relations: Map<string, Set<ReferenceKind>>,
@@ -194,20 +192,16 @@ export function describeFile(index: GraphIndex, id: string | null): FileDetails 
   };
 }
 
-const LANGUAGE_NAMES: Record<SourceLanguage, string> = {
-  typescript: "TypeScript",
-  javascript: "JavaScript",
-};
-
-export function languageName(language: SourceLanguage): string {
-  return LANGUAGE_NAMES[language];
-}
+export { languageName };
 
 const KIND_NAMES: Record<ReferenceKind, string> = {
   import: "import",
   reexport: "re-export",
   dynamic_import: "dynamic import",
   require: "require",
+  include: "include",
+  module: "module",
+  reference: "reference",
 };
 
 export function kindName(kind: ReferenceKind): string {

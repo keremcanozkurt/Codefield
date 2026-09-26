@@ -1,4 +1,4 @@
-import type { ReferenceKind } from "../analysis/imports.ts";
+import { emptyKindCounts, REFERENCE_KINDS } from "../analysis/kinds.ts";
 import { compareStrings, directoryOf } from "../analysis/paths.ts";
 import type { ModuleRelationship } from "../analysis/relationships.ts";
 import type { SourceFile } from "../source-files.ts";
@@ -7,12 +7,10 @@ import type {
   DirectorySummary,
   GraphEdge,
   GraphNode,
-  KindCounts,
+  LanguageCounts,
 } from "./types.ts";
 
 export type GraphSource = Pick<SourceFile, "path" | "extension" | "language" | "size">;
-
-const KINDS: readonly ReferenceKind[] = ["import", "reexport", "dynamic_import", "require"];
 
 // JSON keeps the pair unambiguous even for paths that contain separators such
 // as " -> ", and the ID only changes when the pair does.
@@ -71,7 +69,7 @@ export function buildDependencyGraph(
     if (!nodes.has(targetPath)) {
       throw new Error(`Relationship target is not a loaded source file: ${targetPath}`);
     }
-    if (!KINDS.includes(kind)) {
+    if (!REFERENCE_KINDS.includes(kind)) {
       throw new Error(`Unknown relationship kind: ${JSON.stringify(kind)}`);
     }
     if (sourcePath === targetPath) continue;
@@ -115,7 +113,7 @@ export function buildDependencyGraph(
     const target = nodes.get(edge.target)!;
     source.outgoing++;
     target.incoming++;
-    for (const kind of KINDS) {
+    for (const kind of REFERENCE_KINDS) {
       if (edge.kinds[kind] === 0) continue;
       source.outgoingByKind[kind]++;
       target.incomingByKind[kind]++;
@@ -124,14 +122,14 @@ export function buildDependencyGraph(
 
   const sortedNodes = [...nodes.values()].sort((a, b) => compareStrings(a.path, b.path));
   const directories = new Map<string, DirectorySummary>();
-  const languages = { typescript: 0, javascript: 0 };
+  const languages: LanguageCounts = {};
   let totalBytes = 0;
   let isolatedNodes = 0;
 
   for (const node of sortedNodes) {
     node.degree = node.incoming + node.outgoing;
     if (node.degree === 0) isolatedNodes++;
-    languages[node.language]++;
+    languages[node.language] = (languages[node.language] ?? 0) + 1;
     totalBytes += node.size;
 
     const directory = directories.get(node.directory);
@@ -161,10 +159,6 @@ export function buildDependencyGraph(
       languages,
     },
   };
-}
-
-function emptyKindCounts(): KindCounts {
-  return { import: 0, reexport: 0, dynamic_import: 0, require: 0 };
 }
 
 // Repository-relative, "/"-separated, without empty, "." or ".." segments.

@@ -193,3 +193,47 @@ describe("selectSourceFiles", () => {
     assert.equal(selection.limited, false);
   });
 });
+
+describe("selectSourceFiles across languages", () => {
+  it("selects every supported language with its language ID, in path order", () => {
+    const selection = selectSourceFiles(
+      ["z.swift", "a/main.go", "lib/app.rb", "src/lib.rs", "App.java", "Main.kt", "Program.cs", "m.c", "n.hpp", "i.php", "x.dart", "e.ex", "s.scala", "l.lua", "p.py"].map((path) => blob(path)),
+    );
+
+    assert.deepEqual(
+      selection.candidates.map((c) => `${c.path}:${c.language}`),
+      ["App.java:java", "Main.kt:kotlin", "Program.cs:csharp", "a/main.go:go", "e.ex:elixir", "i.php:php", "l.lua:lua", "lib/app.rb:ruby", "m.c:c", "n.hpp:cpp", "p.py:python", "s.scala:scala", "src/lib.rs:rust", "x.dart:dart", "z.swift:swift"],
+    );
+  });
+
+  it("ignores dependency and build directories of other ecosystems", () => {
+    assert.deepEqual(
+      selectedPaths([
+        blob(".venv/lib/site.py"),
+        blob("venv/x.py"),
+        blob("pkg/__pycache__/m.py"),
+        blob("pkg.egg-info/x.py"),
+        blob("target/debug/build.rs"),
+        blob(".gradle/x.kt"),
+        blob("App/obj/Debug/Gen.cs"),
+        blob(".dart_tool/x.dart"),
+        blob("_build/dev/x.ex"),
+        blob("deps/phoenix/lib/x.ex"),
+        blob(".build/checkouts/x.swift"),
+        blob("Pods/Lib/x.swift"),
+        blob("vendor/bundle/ruby/x.rb"),
+        blob("src/app.py"),
+      ]),
+      ["src/app.py"],
+    );
+  });
+
+  it("keeps ordinary source directories whose names tools also use", () => {
+    assert.deepEqual(selectedPaths([blob("src/bin/cli.rs"), blob("bin/setup.rb"), blob("lib/tasks/x.rb"), blob("app/targets.py")]), [
+      "app/targets.py",
+      "bin/setup.rb",
+      "lib/tasks/x.rb",
+      "src/bin/cli.rs",
+    ]);
+  });
+});

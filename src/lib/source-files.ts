@@ -1,6 +1,12 @@
 import type { TreeEntry } from "./github/types.ts";
+import {
+  isSourceExtension,
+  languageForExtension,
+  type LanguageId,
+  type SourceExtension,
+} from "./languages/registry.ts";
 
-export const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"] as const;
+export { SOURCE_EXTENSIONS, type SourceExtension } from "./languages/registry.ts";
 
 // Files above this size are nearly always generated or vendored, and each one
 // is downloaded in full.
@@ -10,10 +16,14 @@ export const MAX_SOURCE_FILE_BYTES = 512 * 1024;
 // capped well below the authenticated limit of 5,000 requests per hour.
 export const MAX_SOURCE_FILES = 500;
 
+// Dependency, build-output and tool directories. Only names that are almost
+// never used for hand-written source are listed: "bin", for example, holds Rust
+// binaries and Ruby executables, so it is not ignored even though .NET builds
+// into it.
 const IGNORED_DIRECTORIES = new Set([
+  // JavaScript
   "node_modules",
   "bower_components",
-  "vendor",
   "dist",
   "build",
   "out",
@@ -24,12 +34,39 @@ const IGNORED_DIRECTORIES = new Set([
   ".output",
   ".turbo",
   ".vercel",
+  // Go, PHP (Composer), Ruby (vendor/bundle) and vendored C
+  "vendor",
+  // Python
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".tox",
+  ".eggs",
+  "site-packages",
+  // Rust, Maven and sbt output
+  "target",
+  // Gradle
+  ".gradle",
+  // .NET intermediate output, which also holds generated .cs files
+  "obj",
+  // Dart
+  ".dart_tool",
+  // Elixir
+  "_build",
+  "deps",
+  // Swift and CocoaPods
+  ".build",
+  "Pods",
+  "Carthage",
+  "DerivedData",
 ]);
 
 const GENERATED_FILE_PATTERN = /\.(min|bundle)\.jsx?$/;
 
-export type SourceExtension = (typeof SOURCE_EXTENSIONS)[number];
-export type SourceLanguage = "typescript" | "javascript";
+export type SourceLanguage = LanguageId;
 
 export type SourceCandidate = {
   path: string;
@@ -72,7 +109,7 @@ export function selectSourceFiles(entries: TreeEntry[]): SourceSelection {
       sha: entry.sha,
       size: entry.size,
       extension,
-      language: extension === ".ts" || extension === ".tsx" ? "typescript" : "javascript",
+      language: languageForExtension(extension)!.id,
     });
   }
 
@@ -111,9 +148,5 @@ export function sourceExtension(path: string): SourceExtension | null {
 
 export function isIgnoredPath(path: string): boolean {
   const directories = path.split("/").slice(0, -1);
-  return directories.some((directory) => IGNORED_DIRECTORIES.has(directory));
-}
-
-function isSourceExtension(value: string): value is SourceExtension {
-  return (SOURCE_EXTENSIONS as readonly string[]).includes(value);
+  return directories.some((directory) => IGNORED_DIRECTORIES.has(directory) || directory.endsWith(".egg-info"));
 }

@@ -12,6 +12,7 @@ import {
   DEFAULT_FILTERS,
   directoryOptions,
   filterCounts,
+  languageOptions,
   resolveSelection,
   visibleNodeIds,
   type FilterState,
@@ -55,6 +56,7 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
   );
   const insights = useMemo(() => deriveRepositoryInsights(graph), [graph]);
   const directories = useMemo(() => directoryOptions(index), [index]);
+  const languages = useMemo(() => languageOptions(index), [index]);
   const counts = useMemo(() => filterCounts(index, visibleIds), [index, visibleIds]);
 
   const constellationRef = useRef<ConstellationHandle>(null);
@@ -127,6 +129,7 @@ export function GraphWorkspace({ graph, label, repositoryFullName }: GraphWorksp
           filters={filters}
           onChange={setFilters}
           directories={directories}
+          languages={languages}
           visibleCount={counts.visible}
           totalCount={counts.total}
         />

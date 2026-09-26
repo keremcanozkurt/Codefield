@@ -10,6 +10,7 @@ import {
   type FilterState,
   type LanguageFilter,
 } from "@/lib/visualization/filters";
+import { languageName, type LanguageId } from "@/lib/languages/registry";
 
 type GraphFiltersProps = {
   filters: FilterState;
@@ -17,6 +18,8 @@ type GraphFiltersProps = {
   // Directory paths present in the graph, sorted with the repository root
   // ("") first.
   directories: string[];
+  // Languages present in the graph, in registry order.
+  languages: LanguageId[];
   visibleCount: number;
   totalCount: number;
 };
@@ -24,7 +27,7 @@ type GraphFiltersProps = {
 const selectClass =
   "h-9 rounded-md border border-line bg-surface px-2 text-sm text-foreground transition-colors duration-150 hover:border-line-strong focus:border-line-strong focus:outline-2 focus:outline-offset-2 focus:outline-foreground/40";
 
-export function GraphFilters({ filters, onChange, directories, visibleCount, totalCount }: GraphFiltersProps) {
+export function GraphFilters({ filters, onChange, directories, languages, visibleCount, totalCount }: GraphFiltersProps) {
   const languageId = useId();
   const directoryId = useId();
   const connectivityId = useId();
@@ -48,8 +51,14 @@ export function GraphFilters({ filters, onChange, directories, visibleCount, tot
           className={selectClass}
         >
           <option value="all">All languages</option>
-          <option value="typescript">TypeScript</option>
-          <option value="javascript">JavaScript</option>
+          {/* A language kept selected from an earlier repository stays listed, so the control shows what is filtered. */}
+          {(filters.language === "all" || languages.includes(filters.language) ? languages : [...languages, filters.language]).map(
+            (language) => (
+              <option key={language} value={language}>
+                {languageName(language)}
+              </option>
+            ),
+          )}
         </select>
       </div>
 

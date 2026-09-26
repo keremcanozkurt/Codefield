@@ -1,5 +1,5 @@
-import type { ReferenceKind } from "../analysis/imports.ts";
-import type { SourceLanguage } from "../source-files.ts";
+import type { ReferenceKind } from "../analysis/kinds.ts";
+import type { LanguageId } from "../languages/registry.ts";
 
 // Graph data sent to the browser. toRenderGraph copies these fields by name, so
 // fields added to the domain graph do not reach the client unless listed here.
@@ -7,7 +7,7 @@ export type RenderNode = {
   id: string;
   path: string;
   directory: string;
-  language: SourceLanguage;
+  language: LanguageId;
   size: number;
   incoming: number;
   outgoing: number;

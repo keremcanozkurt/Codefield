@@ -4,13 +4,13 @@ Turns a public GitHub repository into an interactive map of its code.
 
 ## What it does
 
-Codefield fetches a public GitHub repository, parses its JavaScript and TypeScript files for local import relationships, and renders the result as an explorable constellation: each source file is a star, each relationship is a connecting line. The graph is the product — search, filters and the file inspector help you navigate a repository's structure without reading the code first, and the result can be exported as a PNG.
+Codefield fetches a public GitHub repository, reads its source files for relationships between files of the repository (imports, includes, module declarations and similar), and renders the result as an explorable constellation: each source file is a star, each relationship is a connecting line. The graph is the product — search, filters and the file inspector help you navigate a repository's structure without reading the code first, and the result can be exported as a PNG.
 
 ## Features
 
 - public GitHub repository analysis, from just a repository URL
 - optional private repository access through a GitHub App, for repositories the user grants
-- JS/TS import, re-export, dynamic import and require relationship extraction
+- static relationship extraction for 17 languages, resolved only to files of the repository
 - constellation visualization with directory-aware, deterministic layout
 - file inspector (path, size, language, references and referenced-by)
 - impact tracing: for a selected file, the files that depend on it directly or through other files, grouped by dependency depth
@@ -18,20 +18,39 @@ Codefield fetches a public GitHub repository, parses its JavaScript and TypeScri
 - file search and graph filters (language, directory, connectivity, minimum degree)
 - high-resolution PNG export of the current view
 
-## Supported files
+## Languages
 
-- `.ts`
-- `.tsx`
-- `.js`
-- `.jsx`
+Codefield only adds an edge when it can resolve a reference to exactly one analyzed file of the repository. Standard libraries and external packages (npm, PyPI, crates.io, Maven, NuGet, Composer, gems, Go modules, pub, Hex, SwiftPM dependencies) never become nodes, and a reference that could mean several files is left out rather than guessed. A sparse graph is preferred over a wrong one.
 
-Declaration files (`.d.ts`), minified or bundled files (`.min.js`, `.bundle.js`), files larger than 512 KiB, and anything inside common dependency or build output directories (`node_modules`, `dist`, `build`, `out`, `coverage`, `vendor`, `.next`, and similar) are skipped. At most 500 source files are analyzed per repository, the first 500 by path.
+"Strong" languages name files or modules directly, so most real dependencies show up. "Conservative" languages mostly import namespaces or packages, so only references that map to one file are kept and graphs are sparser.
+
+| Language | Extensions | Relationships | Resolution | Support |
+| --- | --- | --- | --- | --- |
+| TypeScript, JavaScript | `.ts` `.tsx` `.js` `.jsx` | import, export from, `import()` and `require` with literals | relative paths, index files, `tsconfig.json`/`jsconfig.json` `baseUrl` and `paths` | strong |
+| Python | `.py` | `import`, `from ... import`, relative imports | import roots: repository root, `src/`, the parent of each top-level package, the script's own directory; `from pkg import name` targets the submodule `name` if there is one, else `pkg/__init__.py` | strong |
+| Go | `.go` | imports | module path from each `go.mod`; a package import points at one representative file of the package (the file named after the directory, else the first non-test file) | conservative |
+| Rust | `.rs` | `mod name;`, `use` paths | module tree from crate roots (`Cargo.toml` conventions, `#[path]`); `use crate::`/`self::`/`super::` and other workspace crates, to the file of the longest module prefix | strong |
+| Java | `.java` | imports, static imports, same-package type names | index of top-level types by fully qualified name | strong |
+| Kotlin | `.kt` `.kts` | imports (with aliases, top-level functions), same-package type names | shared index with Java and Scala | conservative |
+| Scala | `.scala` `.sc` | imports (selectors, renames, relative to the package), same-package type names | shared index with Java and Kotlin | conservative |
+| C# | `.cs` | `using static`, `using Alias = Type`, type names used in code | enclosing namespaces, then `using` namespaces and the project's global usings; a namespace `using` alone never adds edges | conservative |
+| C, C++ | `.c` `.h`, `.cc` `.cpp` `.cxx` `.hh` `.hpp` `.hxx` | `#include "..."` and `#include <...>` | the including file's directory, the repository root and `include`/`inc` directories, then a unique path suffix; no macro expansion | strong |
+| PHP | `.php` | `include`/`require` with literal paths (also `__DIR__ . '...'`), `use` imports, class names in code | declared classes and `composer.json` PSR-4 prefixes | strong |
+| Ruby | `.rb` | `require_relative`, `require`, `autoload` | the file's directory, and the repository root and `lib/` directories | strong |
+| Dart | `.dart` | `import`, `export`, `part`, `part of` | relative URIs and `package:` URIs of packages in this repository (`pubspec.yaml`) | strong |
+| Elixir | `.ex` `.exs` | `alias`, `import`, `require`, `use`, module names in code | index of `defmodule` names, exact matches only | strong |
+| Lua | `.lua` | `require` with a literal name | `a.b` as `a/b.lua` or `a/b/init.lua` under the root, `lua/`, `src/` or `lib/` | strong |
+| Swift | `.swift` | type names in code, including `extension Type` | types declared in the file's module (a Swift package target, or else all other Swift files) and in package targets it imports; `import Module` alone never adds edges | conservative |
+
+Type names used in code (Java, Kotlin, Scala, C#, PHP, Swift, Elixir) are only resolved when exactly one type of that name is in scope, the file does not declare the name itself, and a single file declares the type. Nested types, partial classes and types declared in several files are not resolved. Java, Kotlin and Scala share one index, so a Kotlin file importing a Java class is an edge; other cross-language edges only come from syntax that names a file, such as a TypeScript import of `./x.js`.
+
+Declaration files (`.d.ts`), minified or bundled files (`.min.js`, `.bundle.js`), files larger than 512 KiB, and anything inside common dependency or build output directories are skipped: `node_modules`, `dist`, `build`, `out`, `coverage`, `vendor`, `.next`, `.venv`, `venv`, `__pycache__`, `site-packages`, `target`, `.gradle`, `obj`, `.dart_tool`, `_build`, `deps`, `.build`, `Pods` and similar. At most 500 source files are analyzed per repository, the first 500 by path.
 
 ## How it works
 
-GitHub repository URL → repository metadata and file tree (GitHub REST API) → a single ZIP archive of the default branch → source files parsed with the TypeScript compiler API → local imports resolved and normalized into a dependency graph → the graph is drawn with Graphology and Sigma.js.
+GitHub repository URL → repository metadata and file tree (GitHub REST API) → a single ZIP archive of the default branch → each source file handed to the analyzer registered for its language → references resolved against the repository's files and normalized into one dependency graph → the graph is drawn with Graphology and Sigma.js.
 
-Parsing is syntax-only: nothing is type-checked, compiled or executed. Only the resulting graph (file paths, sizes, languages and edge counts and kinds) is sent to the browser — source contents, import specifiers and any configured GitHub token stay on the server.
+TypeScript and JavaScript are parsed with the TypeScript compiler API. The other languages use a shared tokenizer that understands each language's comments and string literals (including raw strings, heredocs and sigils), from which each analyzer reads the few top-level forms it needs. Manifests (`go.mod`, `Cargo.toml`, `composer.json`, `pubspec.yaml`) are read as data. Parsing is syntax-only: nothing is type-checked, compiled or executed, and no project tool is ever run. Only the resulting graph (file paths, sizes, languages and edge counts and kinds) is sent to the browser — source contents, import specifiers and any configured GitHub token stay on the server.
 
 ## Run locally
 
@@ -101,8 +120,9 @@ For a deployment, use the deployed origin in place of `http://localhost:3000`, i
 ## Limits / current scope
 
 - private repositories need the GitHub App described below; without it, only public repositories can be analyzed
-- JavaScript and TypeScript (`.ts`, `.tsx`, `.js`, `.jsx`) only
-- static import analysis only; relationships that only exist at runtime (dynamically constructed paths, non-literal `require`/`import()` arguments, package `exports` maps, workspace packages, bundler-specific aliases) are not resolved
+- static analysis only; relationships that only exist at runtime (dynamically constructed paths, interpolated strings, non-literal `require`/`import()` arguments, `sys.path` changes, `package.path`) are not resolved, and neither are package `exports` maps, JavaScript workspace packages, bundler aliases, C/C++ include paths set by build flags, or Go workspaces (`go.work`)
+- Go edges are package-level (one representative file per imported package); files of one Go package never reference each other through imports, so they have no edges between them
+- Kotlin top-level functions are only linked through imports, not through unqualified calls
 - an import that resolves to an external package is not added to the graph — only repository-internal relationships are shown
 - whether a private repository is missing, not readable by the user, or not granted to the app cannot be told apart: GitHub answers all three the same way
 - impact tracing follows the same static relationships: it lists files that could be affected by a change, not files that will be, and cannot see dependencies the analysis misses

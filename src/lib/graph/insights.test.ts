@@ -7,7 +7,7 @@ import type { SourceExtension, SourceFile } from "../source-files.ts";
 import { buildGraphIndex, describeFile, neighborhood, searchFiles, selectionFor } from "../visualization/inspection.ts";
 import { toRenderGraph } from "../visualization/payload.ts";
 import { buildDependencyGraph } from "./build.ts";
-import { deriveRepositoryInsights, directoryHighlights, fileHighlights, type InsightGraph } from "./insights.ts";
+import { deriveRepositoryInsights, directoryHighlights, fileHighlights, languageBreakdown, type InsightGraph } from "./insights.ts";
 
 function file(path: string, size = 100): Pick<SourceFile, "path" | "extension" | "language" | "size"> {
   const extension = path.slice(path.lastIndexOf(".")) as SourceExtension;
@@ -139,7 +139,7 @@ describe("file insights", () => {
       directories: 1,
       totalBytes: 321,
       isolatedFiles: 1,
-      languages: { typescript: 0, javascript: 1 },
+      languages: { javascript: 1 },
     });
     assert.deepEqual(fileHighlights(result), [
       { file: result.isolated[0], facts: [{ kind: "largest", value: 321, ties: 0 }] },
@@ -462,7 +462,7 @@ describe("boundaries", () => {
       directories: 0,
       totalBytes: 0,
       isolatedFiles: 0,
-      languages: { typescript: 0, javascript: 0 },
+      languages: {},
     });
     assert.deepEqual(result.files, { mostReferenced: null, mostOutgoing: null, highestDegree: null, largest: null });
     assert.deepEqual(result.directoryFacts, { mostFiles: null, mostIncoming: null, mostOutgoing: null, highestDegree: null });
@@ -491,7 +491,7 @@ describe("boundaries", () => {
     assert.equal(result.totals.files, 500);
     assert.equal(result.totals.edges, graph.stats.edges);
     assert.equal(result.totals.relationships, graph.stats.relationships);
-    assert.equal(result.totals.languages.javascript + result.totals.languages.typescript, 500);
+    assert.equal((result.totals.languages.javascript ?? 0) + (result.totals.languages.typescript ?? 0), 500);
     assert.equal(result.directories.reduce((sum, d) => sum + d.fileCount, 0), 500);
     assert.equal(
       result.directories.reduce((sum, d) => sum + d.degree, 0),
@@ -529,5 +529,20 @@ describe("navigation from insights", () => {
 
   it("finds the same files through search", () => {
     assert.equal(searchFiles(index, insights.files.largest!.file.name)[0].id, insights.files.largest!.file.id);
+  });
+});
+
+describe("languages", () => {
+  it("counts every language present and orders them by file count", () => {
+    assert.deepEqual(languageBreakdown({ typescript: 10, python: 42, rust: 18, go: 0 }), [
+      { language: "python", files: 42 },
+      { language: "rust", files: 18 },
+      { language: "typescript", files: 10 },
+    ]);
+    assert.deepEqual(languageBreakdown({ cpp: 3, c: 3 }), [
+      { language: "c", files: 3 },
+      { language: "cpp", files: 3 },
+    ]);
+    assert.deepEqual(languageBreakdown({}), []);
   });
 });

@@ -1,4 +1,4 @@
-import type { SourceLanguage } from "../source-files.ts";
+import type { LanguageId } from "../languages/registry.ts";
 import { EDGE, LANGUAGE_COLORS, NODE, type Rgb } from "./theme.ts";
 import type { EdgeAttributes, NodeAttributes, RenderEdge, RenderNode } from "./types.ts";
 
@@ -28,11 +28,11 @@ export function nodeSize(bytes: number, degree: number): number {
   return fileSizeToNodeSize(bytes) * (1 + NODE.degreeSizeBoost * degreeEmphasis(degree));
 }
 
-export function languageColors(language: SourceLanguage): { quiet: Rgb; bright: Rgb } {
+export function languageColors(language: LanguageId): { quiet: Rgb; bright: Rgb } {
   return LANGUAGE_COLORS[language];
 }
 
-export function nodeColor(language: SourceLanguage, emphasis: number): string {
+export function nodeColor(language: LanguageId, emphasis: number): string {
   const { quiet, bright } = languageColors(language);
   return toHex(mix(quiet, bright, emphasis));
 }

@@ -60,6 +60,24 @@ type RawConfig = {
   extends: string[];
 };
 
+export function isProjectConfigName(path: string): boolean {
+  return CONFIG_FILE_PATTERN.test(path.slice(path.lastIndexOf("/") + 1));
+}
+
+// Manifests other analyzers read to map imports onto repository files. Only
+// data files, or files whose relevant part is a plain literal, are listed;
+// none of them is ever executed.
+const MANIFEST_NAMES = new Set([
+  "go.mod",
+  "Cargo.toml",
+  "composer.json",
+  "pubspec.yaml",
+]);
+
+export function isAuxiliaryFileName(name: string): boolean {
+  return CONFIG_FILE_PATTERN.test(name) || MANIFEST_NAMES.has(name);
+}
+
 export function selectConfigFiles(entries: TreeEntry[]): ConfigCandidate[] {
   const candidates: ConfigCandidate[] = [];
 
@@ -68,7 +86,7 @@ export function selectConfigFiles(entries: TreeEntry[]): ConfigCandidate[] {
     if (entry.size > MAX_CONFIG_FILE_BYTES || isIgnoredPath(entry.path)) continue;
 
     const name = entry.path.slice(entry.path.lastIndexOf("/") + 1);
-    if (!CONFIG_FILE_PATTERN.test(name)) continue;
+    if (!isAuxiliaryFileName(name)) continue;
 
     candidates.push({ path: entry.path, sha: entry.sha, size: entry.size });
   }

@@ -1,15 +1,18 @@
 import ts from "typescript";
 
 import type { SourceExtension } from "../source-files.ts";
+import type { ReferenceKind } from "./kinds.ts";
 
-export type ReferenceKind = "import" | "reexport" | "dynamic_import" | "require";
+export type { ReferenceKind } from "./kinds.ts";
 
 export type ModuleReference = {
   specifier: string;
   kind: ReferenceKind;
 };
 
-const SCRIPT_KINDS: Record<SourceExtension, ts.ScriptKind> = {
+export type EcmaScriptExtension = Extract<SourceExtension, ".ts" | ".tsx" | ".js" | ".jsx">;
+
+const SCRIPT_KINDS: Record<EcmaScriptExtension, ts.ScriptKind> = {
   ".ts": ts.ScriptKind.TS,
   ".tsx": ts.ScriptKind.TSX,
   ".js": ts.ScriptKind.JS,
@@ -23,7 +26,7 @@ const SCRIPT_KINDS: Record<SourceExtension, ts.ScriptKind> = {
 export function extractModuleReferences(
   path: string,
   content: string,
-  extension: SourceExtension,
+  extension: EcmaScriptExtension,
 ): ModuleReference[] {
   const sourceFile = ts.createSourceFile(
     path,

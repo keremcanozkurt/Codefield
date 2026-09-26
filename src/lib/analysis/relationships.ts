@@ -1,10 +1,12 @@
-import type { SourceFile } from "../source-files.ts";
-import { readProjectConfigs, type ConfigFile, type ConfigStatus } from "./config.ts";
-import { extractModuleReferences, type ReferenceKind } from "./imports.ts";
+import { languageForExtension, type AnalyzerId } from "../languages/registry.ts";
+import type { AnalysisSource, AnalyzedFile, FileReference, RepositoryContext } from "./analyzer.ts";
+import { ANALYZERS } from "./analyzers.ts";
+import { isProjectConfigName, readProjectConfigs, type ConfigFile, type ConfigStatus } from "./config.ts";
+import type { ReferenceKind } from "./kinds.ts";
 import { compareStrings } from "./paths.ts";
-import { createModuleResolver, type UnresolvedReason } from "./resolve.ts";
+import type { UnresolvedReason } from "./resolve.ts";
 
-export type AnalysisSource = Pick<SourceFile, "path" | "content" | "extension">;
+export type { AnalysisSource } from "./analyzer.ts";
 
 export type ModuleRelationship = {
   sourcePath: string;
@@ -39,50 +41,58 @@ export type ModuleAnalysis = {
 };
 
 export type AnalysisOptions = {
+  // tsconfig.json, go.mod, Cargo.toml and the other auxiliary files that
+  // selectConfigFiles picks.
   configFiles?: ConfigFile[];
   // All blob paths in the repository tree, used to report references to
   // files that exist but are not analyzed.
   repositoryPaths?: Iterable<string>;
 };
 
-// Relationships only connect files in `files`. External packages are dropped,
-// a file referring to itself is ignored, and repeated identical references
-// are reported once.
+// Relationships only connect files in `files`. Each file goes to the analyzer
+// its language is registered with; external packages are dropped, a file
+// referring to itself is ignored, and repeated identical references are
+// reported once. The result is the same for every language, so the graph is
+// built the same way whatever the repository contains.
 export function analyzeModuleRelationships(
   files: AnalysisSource[],
   { configFiles = [], repositoryPaths }: AnalysisOptions = {},
 ): ModuleAnalysis {
-  const configs = readProjectConfigs(configFiles);
-  const resolve = createModuleResolver({
+  const repository: RepositoryContext = {
     sourcePaths: new Set(files.map((file) => file.path)),
     repositoryPaths: repositoryPaths === undefined ? undefined : new Set(repositoryPaths),
-    configFor: configs.configFor,
-  });
+    configFiles,
+  };
+
+  const groups = new Map<AnalyzerId, AnalyzedFile[]>();
+  for (const file of files) {
+    const language = languageForExtension(file.extension);
+    if (language === null) continue;
+    const group = groups.get(language.analyzer) ?? [];
+    group.push({ ...file, language: language.id });
+    groups.set(language.analyzer, group);
+  }
 
   const relationships = new Map<string, ModuleRelationship>();
   const unresolved = new Map<string, UnresolvedReference>();
   const skipped: SkippedAnalysis[] = [];
 
-  for (const file of files) {
-    let references;
-    try {
-      references = extractModuleReferences(file.path, file.content, file.extension);
-    } catch {
-      skipped.push({ path: file.path, reason: "parse_failed" });
-      continue;
+  const record = (sourcePath: string, { specifier, kind, resolution }: FileReference) => {
+    if (resolution.status === "resolved") {
+      if (resolution.path === sourcePath || !repository.sourcePaths.has(resolution.path)) return;
+      const key = [sourcePath, resolution.path, kind, specifier].join("\0");
+      relationships.set(key, { sourcePath, targetPath: resolution.path, kind, specifier });
+    } else if (resolution.status === "unresolved") {
+      const key = [sourcePath, specifier, kind].join("\0");
+      unresolved.set(key, { sourcePath, specifier, kind, reason: resolution.reason });
     }
+  };
 
-    for (const { specifier, kind } of references) {
-      const result = resolve(file.path, specifier);
-
-      if (result.status === "resolved") {
-        if (result.path === file.path) continue;
-        const key = [file.path, result.path, kind, specifier].join("\0");
-        relationships.set(key, { sourcePath: file.path, targetPath: result.path, kind, specifier });
-      } else if (result.status === "unresolved") {
-        const key = [file.path, specifier, kind].join("\0");
-        unresolved.set(key, { sourcePath: file.path, specifier, kind, reason: result.reason });
-      }
+  for (const [analyzer, group] of groups) {
+    const result = ANALYZERS[analyzer](group, repository);
+    for (const path of result.failed) skipped.push({ path, reason: "parse_failed" });
+    for (const [sourcePath, references] of result.references) {
+      for (const reference of references) record(sourcePath, reference);
     }
   }
 
@@ -105,7 +115,7 @@ export function analyzeModuleRelationships(
     relationships: sortedRelationships,
     unresolved: sortedUnresolved,
     skipped,
-    configs: configs.statuses,
+    configs: readProjectConfigs(configFiles.filter((file) => isProjectConfigName(file.path))).statuses,
     stats: {
       filesAnalyzed: files.length - skipped.length,
       filesSkipped: skipped.length,

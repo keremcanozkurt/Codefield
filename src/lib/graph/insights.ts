@@ -1,5 +1,6 @@
 import { compareStrings } from "../analysis/paths.ts";
-import type { SourceLanguage } from "../source-files.ts";
+import { compareLanguages, type LanguageId } from "../languages/registry.ts";
+import type { LanguageCounts } from "./types.ts";
 
 // The fields insights read. Both the dependency graph and the browser payload
 // have them, so the same facts come out of either.
@@ -7,7 +8,7 @@ export type InsightNode = {
   id: string;
   path: string;
   directory: string;
-  language: SourceLanguage;
+  language: LanguageId;
   size: number;
   // Unique graph edges, as counted by buildDependencyGraph.
   incoming: number;
@@ -61,7 +62,8 @@ export type RepositoryInsights = {
     directories: number;
     totalBytes: number;
     isolatedFiles: number;
-    languages: Record<SourceLanguage, number>;
+    // Only languages with at least one file.
+    languages: LanguageCounts;
   };
   // Null when no file has a value above zero, such as the most referenced file
   // of a graph without edges.
@@ -88,12 +90,12 @@ export function deriveRepositoryInsights(graph: InsightGraph): RepositoryInsight
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
   const directories = new Map<string, DirectoryMetrics>();
-  const languages: Record<SourceLanguage, number> = { typescript: 0, javascript: 0 };
+  const languages: LanguageCounts = {};
   let totalBytes = 0;
   const isolated: FileRef[] = [];
 
   for (const node of nodes) {
-    languages[node.language]++;
+    languages[node.language] = (languages[node.language] ?? 0) + 1;
     totalBytes += node.size;
     if (node.degree === 0) isolated.push(fileRef(node));
 
@@ -252,4 +254,12 @@ function group<Kind, Fact extends { value: number; ties: number }>(
     else existing.facts.push(entry);
   }
   return [...groups.values()];
+}
+
+// Languages with their file counts, most files first; ties in registry order.
+export function languageBreakdown(counts: LanguageCounts): { language: LanguageId; files: number }[] {
+  return (Object.entries(counts) as [LanguageId, number][])
+    .filter(([, files]) => files > 0)
+    .map(([language, files]) => ({ language, files }))
+    .sort((a, b) => b.files - a.files || compareLanguages(a.language, b.language));
 }

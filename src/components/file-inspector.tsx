@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 
-import type { ReferenceKind } from "@/lib/analysis/imports";
+import type { ReferenceKind } from "@/lib/analysis/kinds";
 import type { ImpactDetails } from "@/lib/visualization/impact";
 import { kindName, type FileDetails, type RelatedFile } from "@/lib/visualization/inspection";
 

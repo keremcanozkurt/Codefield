@@ -1,5 +1,5 @@
-import type { ReferenceKind } from "../analysis/imports.ts";
-import type { DependencyGraph, KindCounts } from "../graph/types.ts";
+import { REFERENCE_KINDS, type KindCounts, type ReferenceKind } from "../analysis/kinds.ts";
+import type { DependencyGraph } from "../graph/types.ts";
 import type { RenderGraph } from "./types.ts";
 
 export function toRenderGraph(graph: DependencyGraph): RenderGraph {
@@ -24,8 +24,6 @@ export function toRenderGraph(graph: DependencyGraph): RenderGraph {
   };
 }
 
-const KIND_ORDER: readonly ReferenceKind[] = ["import", "reexport", "dynamic_import", "require"];
-
 function presentKinds(counts: KindCounts): ReferenceKind[] {
-  return KIND_ORDER.filter((kind) => counts[kind] > 0);
+  return REFERENCE_KINDS.filter((kind) => counts[kind] > 0);
 }

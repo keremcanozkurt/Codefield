@@ -1,4 +1,5 @@
 import type { GitHubError, GitHubErrorCode, RateLimit } from "../github/types.ts";
+import { LANGUAGES } from "../languages/registry.ts";
 
 // What a component shows for a failed repository analysis. Kept small and
 // separate from GitHubError so error copy lives in one place rather than
@@ -159,6 +160,10 @@ export const EMPTY_REPOSITORY = {
 // A repository that loaded but contains none of the supported extensions.
 export const NO_SUPPORTED_SOURCE_FILES = {
   title: "No supported source files",
-  message: "No supported JavaScript or TypeScript source files were found.",
-  detail: "Codefield currently analyzes .ts, .tsx, .js and .jsx files.",
+  message: "No source files in a supported language were found.",
+  detail: `Codefield analyzes ${listNames(LANGUAGES.map((language) => language.name))}.`,
 } as const;
+
+function listNames(names: string[]): string {
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}

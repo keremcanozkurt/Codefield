@@ -21,7 +21,14 @@ export type UnresolvedReason =
   | "not_source"
   | "outside_repository"
   // Looks like a path alias, but no tsconfig.json or jsconfig.json maps it.
-  | "unsupported_alias";
+  | "unsupported_alias"
+  // More than one repository file could be meant, so none is chosen.
+  | "ambiguous"
+  // Built at runtime, such as an interpolated string.
+  | "unsupported_dynamic"
+  // Syntax that names something Codefield does not map to files, such as a
+  // wildcard import or a namespace.
+  | "unsupported_resolution";
 
 export type Resolution =
   | { status: "resolved"; path: string }

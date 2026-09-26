@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ReferenceKind } from "../analysis/imports.ts";
+import { emptyKindCounts } from "../analysis/kinds.ts";
 import { analyzeModuleRelationships, type ModuleRelationship } from "../analysis/relationships.ts";
 import type { SourceExtension } from "../source-files.ts";
 import { buildDependencyGraph, edgeId, type GraphSource } from "./build.ts";
@@ -22,7 +23,7 @@ function rel(
 }
 
 function counts(partial: Partial<Record<ReferenceKind, number>> = {}) {
-  return { import: 0, reexport: 0, dynamic_import: 0, require: 0, ...partial };
+  return { ...emptyKindCounts(), ...partial };
 }
 
 function node(graph: ReturnType<typeof buildDependencyGraph>, path: string) {
@@ -353,7 +354,7 @@ describe("buildDependencyGraph", () => {
           relationships: 0,
           totalBytes: 0,
           directories: 0,
-          languages: { typescript: 0, javascript: 0 },
+          languages: {},
         },
       });
     });

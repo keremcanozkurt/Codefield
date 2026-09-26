@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { SourceExtension } from "../source-files.ts";
-import { extractModuleReferences } from "./imports.ts";
+import { extractModuleReferences, type EcmaScriptExtension } from "./imports.ts";
 
-function references(content: string, extension: SourceExtension = ".ts") {
+function references(content: string, extension: EcmaScriptExtension = ".ts") {
   return extractModuleReferences(`src/file${extension}`, content, extension);
 }
 

@@ -3,10 +3,12 @@ import type { Ref } from "react";
 import {
   directoryHighlights,
   fileHighlights,
+  languageBreakdown,
   type DirectoryFactKind,
   type FileFactKind,
   type RepositoryInsights,
 } from "@/lib/graph/insights";
+import { languageName } from "@/lib/languages/registry";
 import { formatBytes } from "@/lib/visualization/inspection";
 
 type RepositoryOverviewProps = {
@@ -52,7 +54,9 @@ export function RepositoryOverview({ insights, headingRef, onSelect }: Repositor
           <Total label="Isolated" value={count(totals.isolatedFiles)} />
         </dl>
         <p className="mt-2 text-xs text-muted">
-          {count(totals.languages.typescript)} TypeScript · {count(totals.languages.javascript)} JavaScript
+          {languageBreakdown(totals.languages)
+            .map(({ language, files }) => `${count(files)} ${languageName(language)}`)
+            .join(" · ")}
         </p>
       </div>
 

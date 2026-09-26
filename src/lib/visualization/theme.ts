@@ -1,4 +1,4 @@
-import type { SourceLanguage } from "../source-files.ts";
+import type { LanguageId } from "../languages/registry.ts";
 
 export type Rgb = readonly [number, number, number];
 
@@ -17,10 +17,29 @@ export const NODE = {
   hoverLighten: 0.5,
 } as const;
 
-// Isolated files use `quiet`; connected files move towards `bright`.
-export const LANGUAGE_COLORS: Record<SourceLanguage, { quiet: Rgb; bright: Rgb }> = {
+// Isolated files use `quiet`; connected files move towards `bright`. Every
+// language gets the same low saturation (about 13% quiet, 33% bright) and
+// lightness, so no language stands out; only the hue differs, spaced around
+// the wheel with related languages kept near each other. C and C++ are the
+// neutral greys. Most repositories show one or two of these at a time.
+export const LANGUAGE_COLORS: Record<LanguageId, { quiet: Rgb; bright: Rgb }> = {
   typescript: { quiet: [112, 124, 140], bright: [190, 202, 217] },
   javascript: { quiet: [140, 131, 115], bright: [216, 205, 182] },
+  python: { quiet: [111, 144, 119], bright: [184, 219, 193] },
+  go: { quiet: [111, 137, 144], bright: [184, 212, 219] },
+  rust: { quiet: [144, 121, 111], bright: [219, 194, 184] },
+  java: { quiet: [136, 111, 144], bright: [210, 184, 219] },
+  kotlin: { quiet: [111, 112, 144], bright: [184, 185, 219] },
+  csharp: { quiet: [123, 144, 111], bright: [197, 219, 184] },
+  c: { quiet: [128, 128, 128], bright: [204, 204, 204] },
+  cpp: { quiet: [120, 125, 135], bright: [197, 202, 211] },
+  php: { quiet: [123, 111, 144], bright: [197, 184, 219] },
+  ruby: { quiet: [144, 111, 115], bright: [219, 184, 188] },
+  dart: { quiet: [111, 144, 136], bright: [184, 219, 210] },
+  elixir: { quiet: [144, 111, 140], bright: [219, 184, 214] },
+  scala: { quiet: [144, 111, 128], bright: [219, 184, 201] },
+  lua: { quiet: [144, 140, 111], bright: [219, 214, 184] },
+  swift: { quiet: [136, 144, 111], bright: [210, 219, 184] },
 };
 
 export const EDGE = {
