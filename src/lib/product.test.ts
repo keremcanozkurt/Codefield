@@ -6,7 +6,7 @@ import { CLONE_COMMAND, FAQ, OPEN_COMMAND, SUPPORT_URL } from "./product.ts";
 
 describe("support link", () => {
   it("points at the support site", () => {
-    assert.equal(SUPPORT_URL, "https://support.codefield.dev");
+    assert.equal(SUPPORT_URL, "https://codefield.keremcanozkurt.com/support");
   });
 });
 
@@ -35,7 +35,7 @@ describe("FAQ", () => {
       "What does Path Finder mean?",
       "Which languages are supported?",
       "Why is there no drag and drop or Choose Folder?",
-      "Is Codefield open source?",
+      "Is the source available?",
     ]) {
       assert.ok(questions.includes(question), question);
     }

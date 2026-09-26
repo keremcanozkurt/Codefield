@@ -1,7 +1,7 @@
 import { LANGUAGES } from "./languages/registry.ts";
 
-export const SUPPORT_URL = "https://support.codefield.dev";
-export const SUPPORT_NOTE = "Codefield is free and open source. Support its continued development.";
+export const SUPPORT_URL = "https://codefield.keremcanozkurt.com/support";
+export const SUPPORT_NOTE = "Codefield is free for personal use. Support its continued development.";
 
 export const OPEN_COMMAND = "codefield .";
 export const CLONE_COMMAND = "codefield clone git@example.com:team/project.git";
@@ -77,8 +77,9 @@ export const FAQ: FaqEntry[] = [
       "Codefield only reads the folder you start it with from the terminal. Keeping that choice out of the browser means no web page can ask Codefield to read other folders on your computer. To open another repository, start Codefield again from that folder.",
   },
   {
-    question: "Is Codefield open source?",
-    answer: "Yes, under the MIT license.",
+    question: "Is the source available?",
+    answer:
+      "Yes. Codefield is source-available: you can read, fork and modify it for personal and non-commercial use under the PolyForm Noncommercial license, and contributions are welcome. Commercial use needs the author's permission. See LICENSE in the repository for the full terms.",
   },
 ];
 

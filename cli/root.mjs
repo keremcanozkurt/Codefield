@@ -40,6 +40,6 @@ export async function resolveRoot(input, cwd) {
  * @param {string} cwd
  */
 export function baseDirectory(env, cwd) {
-  const ownScript = env.npm_package_name === "codefield" && ["dev", "start", "codefield"].includes(env.npm_lifecycle_event ?? "");
+  const ownScript = env.npm_package_name === "@keremcanozkurt/codefield" && ["dev", "start", "codefield"].includes(env.npm_lifecycle_event ?? "");
   return ownScript && env.INIT_CWD ? env.INIT_CWD : cwd;
 }

@@ -8,18 +8,23 @@ Codefield reads a repository on your machine, finds the relationships between it
 
 Codefield needs Node.js 20.9 or later. Git is only needed for `codefield clone`.
 
-Codefield is not on the npm registry yet. The name `codefield` on npm belongs to an unrelated package, so `npm install codefield` and `npx codefield` do not install this project.
-
-Until it is published, install it from the package file that `npm pack` makes from a checkout of this repository (see [Packaging](#packaging)). The package file already contains the production build, so installing it does not build anything:
-
 ```bash
-npm install --global ./codefield-0.1.0.tgz
+npm install -g @keremcanozkurt/codefield
 ```
 
-This puts a `codefield` command on your PATH. To run it once without installing:
+This puts a `codefield` command on your PATH (see [Quick start](#quick-start)). Or run it once without installing:
 
 ```bash
-npx --package ./codefield-0.1.0.tgz codefield .
+npx @keremcanozkurt/codefield .
+```
+
+The package is `@keremcanozkurt/codefield`, not `codefield`: the unscoped name on npm belongs to an unrelated package.
+
+Codefield is not published to npm yet. Until then, install it from the package file that `npm pack` makes from a checkout of this repository (see [Packaging](#packaging)). The package file already contains the production build, so installing it does not build anything:
+
+```bash
+npm install --global ./keremcanozkurt-codefield-0.1.0.tgz
+npx --package ./keremcanozkurt-codefield-0.1.0.tgz codefield .
 ```
 
 Codefield is written for Linux and Windows. It has been tested on Linux with Node.js 20.9 and 22; it has not been tested on a Windows machine yet. A separate native macOS app is planned.
@@ -251,8 +256,8 @@ The package contains the launcher in `cli/`, the production build in `.next`, `R
 
 ## Support
 
-Codefield is free and open source. You can support its continued development at [support.codefield.dev](https://support.codefield.dev).
+Codefield is free to use personally. You can support its continued development at [codefield.keremcanozkurt.com/support](https://codefield.keremcanozkurt.com/support).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Codefield is source-available: you can read, fork and modify it for personal and non-commercial use under the PolyForm Noncommercial License 1.0.0. Contributions and pull requests are welcome. Commercial use requires permission from Kerem Can Özkurt. See [LICENSE](LICENSE) for the full terms.

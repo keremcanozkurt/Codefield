@@ -79,7 +79,7 @@ function FaqDialog({ ref }: { ref: Ref<HTMLDialogElement> }) {
           rel="noopener noreferrer"
           className="text-muted underline decoration-line-strong underline-offset-2 hover:text-foreground"
         >
-          support.codefield.dev
+          codefield.keremcanozkurt.com/support
         </a>
       </p>
     </dialog>

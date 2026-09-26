@@ -56,7 +56,7 @@ describe("resolveRoot", () => {
 
 describe("baseDirectory", () => {
   it("uses the folder npm was started from for Codefield's own scripts", () => {
-    const env = { npm_package_name: "codefield", npm_lifecycle_event: "dev", INIT_CWD: "/work/other" };
+    const env = { npm_package_name: "@keremcanozkurt/codefield", npm_lifecycle_event: "dev", INIT_CWD: "/work/other" };
     assert.equal(baseDirectory(env, "/opt/codefield"), "/work/other");
   });
 

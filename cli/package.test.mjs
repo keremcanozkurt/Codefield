@@ -10,7 +10,9 @@ const manifest = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "ut
 const cli = join(PACKAGE_ROOT, "cli", "codefield.mjs");
 
 describe("package metadata", () => {
-  it("installs a codefield command that runs with node", () => {
+  it("installs a codefield command that runs with node, from a scoped package", () => {
+    assert.equal(manifest.name, "@keremcanozkurt/codefield");
+    assert.deepEqual(Object.keys(manifest.bin), ["codefield"]);
     assert.equal(manifest.bin.codefield, "cli/codefield.mjs");
     assert.ok(readFileSync(cli, "utf8").startsWith("#!/usr/bin/env node\n"));
   });
@@ -23,8 +25,8 @@ describe("package metadata", () => {
     assert.ok(existsSync(join(PACKAGE_ROOT, "LICENSE")));
   });
 
-  it("is MIT licensed and declares the Node.js versions it runs on", () => {
-    assert.equal(manifest.license, "MIT");
+  it("is source-available under PolyForm Noncommercial and declares the Node.js versions it runs on", () => {
+    assert.equal(manifest.license, "PolyForm-Noncommercial-1.0.0");
     assert.deepEqual(MINIMUM_NODE, parseMinimum(manifest.engines.node));
   });
 

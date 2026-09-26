@@ -1,7 +1,6 @@
 {
-  "name": "codefield",
+  "name": "@keremcanozkurt/codefield",
   "version": "0.1.0",
-  "private": true,
   "description": "Understand a local codebase visually.",
   "keywords": [
     "code-visualization",
@@ -12,7 +11,7 @@
     "developer-tools",
     "local-first"
   ],
-  "homepage": "https://github.com/keremcanozkurt/Codefield#readme",
+  "homepage": "https://codefield.keremcanozkurt.com",
   "bugs": {
     "url": "https://github.com/keremcanozkurt/Codefield/issues"
   },
@@ -20,7 +19,10 @@
     "type": "git",
     "url": "git+https://github.com/keremcanozkurt/Codefield.git"
   },
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Kerem Can Özkurt",
   "type": "module",
   "bin": {
