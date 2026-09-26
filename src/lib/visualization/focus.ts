@@ -1,5 +1,6 @@
 import { propagationDepth, type Impact } from "./impact.ts";
 import type { Neighborhood } from "./inspection.ts";
+import { pathEdgeKey, type PathView } from "./path.ts";
 import type { Frame } from "./layout.ts";
 import { blend, hoveredEdgeStyle, hoveredNodeStyle, premultiplied } from "./mapping.ts";
 import { EDGE, FOCUS, IMPACT, SURFACE } from "./theme.ts";
@@ -19,6 +20,9 @@ export type FocusState = {
   // Set while impact mode is on for the selected file; it then decides the
   // look of every node and edge instead of the neighbourhood.
   impact?: Impact | null;
+  // Set while Path Finder shows a path (or its absence); it then decides the
+  // look of every node and edge, before impact or the neighbourhood.
+  path?: PathView | null;
 };
 
 export function labelsAllFiles(nodeCount: number): boolean {
@@ -42,14 +46,14 @@ export function nodeRole(neighborhood: Neighborhood, id: string): NodeRole {
   return neighborhood.neighbors.has(id) ? "neighbor" : "context";
 }
 
-// Without a selection, hover behaves as before. With one, the selection sets
-// the look of every node and hover only adds a label, so moving the pointer
-// never changes which files appear related.
+// With a selection, the selection sets the look of every node and hover only
+// adds a label, so moving the pointer never changes which files appear related.
 export function focusNode(id: string, data: NodeAttributes, state: FocusState): NodeDisplay {
   const { neighborhood, hovered, labelAll, visible } = state;
   if (visible !== null && !visible.has(id)) {
     return { ...data, hidden: true };
   }
+  if (state.path) return pathNode(id, data, state.path, id === hovered);
   if (state.impact) return impactNode(id, data, state.impact, id === hovered, labelAll);
   if (neighborhood === null) {
     const base = labelAll ? { ...data, forceLabel: true } : data;
@@ -99,6 +103,10 @@ export function focusEdge(
   if (visible !== null && (!visible.has(source) || !visible.has(target))) {
     return { ...data, hidden: true };
   }
+  if (state.path) {
+    if (!state.path.edges.has(pathEdgeKey(source, target))) return contextEdge(data);
+    return { ...hoveredEdgeStyle(data), size: Math.max(data.size, EDGE.hoverSize) * 1.25, zIndex: 2 };
+  }
   if (state.impact) {
     const depth = propagationDepth(state.impact, source, target);
     return depth === null ? contextEdge(data) : impactEdge(data, depth);
@@ -118,6 +126,20 @@ function contextEdge(data: EdgeAttributes): EdgeDisplay {
     size: EDGE.minSize,
     color: premultiplied(EDGE.color, FOCUS.contextEdgeOpacity),
     zIndex: 0,
+  };
+}
+
+// The path's ends look like a selected file, the files between like
+// neighbours of a selection; everything else is faded context.
+function pathNode(id: string, data: NodeAttributes, path: PathView, isHovered: boolean): NodeDisplay {
+  if (id === path.source || id === path.target) return { ...selectedNode(data), forceLabel: true };
+  if (!path.order.has(id)) return contextNode(data, isHovered);
+  return {
+    ...data,
+    color: blend(data.color, [255, 255, 255], FOCUS.neighborLighten),
+    forceLabel: true,
+    highlighted: isHovered,
+    zIndex: 1,
   };
 }
 

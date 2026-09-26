@@ -72,8 +72,8 @@ describe("computeExportDimensions", () => {
 });
 
 describe("exportFileName", () => {
-  it("builds a codefield-prefixed name from owner/repo", () => {
-    assert.equal(exportFileName("vercel/next.js"), "codefield-vercel-next.js.png");
+  it("builds a codefield-prefixed name from the repository name", () => {
+    assert.equal(exportFileName("next.js"), "codefield-next.js.png");
   });
 
   it("collapses unsafe characters to a single dash", () => {

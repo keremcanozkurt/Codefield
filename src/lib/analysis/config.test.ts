@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { TreeEntry } from "../github/types.ts";
 import {
   MAX_CONFIG_FILE_BYTES,
   readProjectConfigs,
   selectConfigFiles,
   type ConfigFile,
 } from "./config.ts";
+import type { FileEntry } from "../source-files.ts";
 import { createModuleResolver } from "./resolve.ts";
 
 function configs(files: Record<string, string>): ConfigFile[] {
@@ -32,8 +32,8 @@ const nextConfig = JSON.stringify({
 });
 
 describe("selectConfigFiles", () => {
-  function blob(path: string, size = 100): TreeEntry {
-    return { path, type: "blob", sha: `sha:${path}`, size };
+  function blob(path: string, size = 100): FileEntry {
+    return { path, size };
   }
 
   it("selects tsconfig and jsconfig files outside ignored directories", () => {
@@ -47,14 +47,13 @@ describe("selectConfigFiles", () => {
       blob("package.json"),
       blob("tsconfig.json.bak"),
       blob("my-tsconfig.json"),
-      { path: "config/tsconfig.json", type: "tree", sha: "t1" },
     ]);
 
     assert.deepEqual(
       selected.map((candidate) => candidate.path),
       ["apps/web/jsconfig.json", "packages/ui/tsconfig.build.json", "tsconfig.base.json", "tsconfig.json"],
     );
-    assert.deepEqual(selected[3], { path: "tsconfig.json", sha: "sha:tsconfig.json", size: 100 });
+    assert.deepEqual(selected[3], { path: "tsconfig.json", size: 100 });
   });
 
   it("skips oversized config files", () => {

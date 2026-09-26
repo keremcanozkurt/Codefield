@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { afterEach, describe, it } from "node:test";
-
-import { strToU8, zipSync } from "fflate";
+import { describe, it } from "node:test";
 
 import { discoverRepository } from "../../discovery.ts";
+import { temporaryDirectory, writeFiles } from "../../local/testing.ts";
 import { buildDependencyGraph } from "../../graph/build.ts";
 import { deriveRepositoryInsights } from "../../graph/insights.ts";
 import { selectSourceFiles } from "../../source-files.ts";
@@ -16,13 +14,11 @@ import type { RenderGraph } from "../../visualization/types.ts";
 import { analyzeModuleRelationships } from "../relationships.ts";
 import type { Fixture } from "./testing.ts";
 
-// The whole analysis, as discovery runs it after download: source selection,
-// relationship analysis, graph construction and the browser payload.
+// The whole analysis as discovery runs it: source selection, relationship
+// analysis, graph construction and the browser payload.
 function repositoryGraph(sources: Fixture, configs: Fixture = {}): RenderGraph {
   const entries = [...Object.entries(sources), ...Object.entries(configs)].map(([path, content]) => ({
     path,
-    type: "blob" as const,
-    sha: path,
     size: content.length,
   }));
   const selection = selectSourceFiles(entries);
@@ -207,8 +203,8 @@ describe("multi-language repositories", () => {
   });
 });
 
-// The same pipeline, end to end through discovery with a mocked GitHub API,
-// so manifest files are selected from the tree and read from the archive.
+// The same pipeline, end to end through discovery of a folder on disk, so
+// manifest files are found by the directory walk and read from disk.
 describe("discovery of a multi-language repository", () => {
   const files: Fixture = {
     "go.mod": "module example.com/mono\n",
@@ -222,47 +218,24 @@ describe("discovery of a multi-language repository", () => {
     "tools/format.py": "",
     "README.md": "# mono",
   };
-  const base = "https://api.github.com/repos/octo/mono";
-  let restore = () => {};
-  afterEach(() => restore());
 
   it("analyzes every language through the one pipeline", async () => {
-    const sha1 = (content: string) => {
-      const bytes = strToU8(content);
-      return createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
-    };
-    const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
-    const routes: Record<string, () => Response> = {
-      [base]: () =>
-        json({ name: "mono", full_name: "octo/mono", owner: { login: "octo" }, private: false, archived: false, html_url: "https://github.com/octo/mono", default_branch: "main", size: 1 }),
-      [`${base}/git/trees/main?recursive=1`]: () =>
-        json({
-          sha: "root",
-          truncated: false,
-          tree: Object.entries(files).map(([path, content]) => ({ path, mode: "100644", type: "blob", sha: sha1(content), size: strToU8(content).length })),
-        }),
-      [`${base}/zipball/main`]: () =>
-        new Response(zipSync({ "octo-mono-1": Object.fromEntries(Object.entries(files).map(([p, c]) => [p, strToU8(c)])) })),
-    };
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const route = routes[String(input)];
-      if (route === undefined) throw new Error(`unexpected request: ${String(input)}`);
-      return route();
-    }) as typeof fetch;
-    restore = () => {
-      globalThis.fetch = original;
-    };
+    const directory = await temporaryDirectory();
+    try {
+      await writeFiles(directory.path, files);
 
-    const result = await discoverRepository("https://github.com/octo/mono");
+      const result = await discoverRepository(directory.path);
 
-    assert.equal(result.status, "success");
-    if (result.status !== "success") return;
-    assert.deepEqual(edgeList(result.graph), [
-      "cmd/main.go -> pkg/util/util.go",
-      "src/lib.rs -> src/parse.rs",
-      "tools/report.py -> tools/format.py",
-    ]);
-    assert.equal(result.graph.nodes.length, 7);
+      assert.equal(result.status, "success");
+      if (result.status !== "success") return;
+      assert.deepEqual(edgeList(result.graph), [
+        "cmd/main.go -> pkg/util/util.go",
+        "src/lib.rs -> src/parse.rs",
+        "tools/report.py -> tools/format.py",
+      ]);
+      assert.equal(result.graph.nodes.length, 7);
+    } finally {
+      await directory.remove();
+    }
   });
 });

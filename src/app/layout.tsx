@@ -1,22 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const description = "Turn a public GitHub repository into an interactive map of its code.";
+const description = "Understand a local codebase visually.";
 
 export const metadata: Metadata = {
   title: "Codefield",
   description,
-  openGraph: {
-    title: "Codefield",
-    description,
-    type: "website",
-    siteName: "Codefield",
-  },
-  twitter: {
-    card: "summary",
-    title: "Codefield",
-    description,
-  },
 };
 
 export const viewport: Viewport = {

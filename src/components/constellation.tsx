@@ -18,6 +18,7 @@ import {
 } from "@/lib/visualization/focus";
 import { toGraphology, type VisualGraph } from "@/lib/visualization/graphology";
 import type { Impact } from "@/lib/visualization/impact";
+import type { PathView } from "@/lib/visualization/path";
 import type { Neighborhood } from "@/lib/visualization/inspection";
 import { RENDERER_SETTINGS } from "@/lib/visualization/settings";
 import { SURFACE } from "@/lib/visualization/theme";
@@ -29,7 +30,7 @@ export type ConstellationHandle = {
   resetView(): void;
   // Renders the current viewport to a PNG and triggers a download. Resolves
   // to whether it succeeded; never rejects.
-  exportPng(repositoryFullName: string): Promise<boolean>;
+  exportPng(repositoryName: string): Promise<boolean>;
 };
 
 type ConstellationProps = {
@@ -38,6 +39,8 @@ type ConstellationProps = {
   neighborhood: Neighborhood | null;
   // Set while impact mode is on for the selected file.
   impact: Impact | null;
+  // Set while Path Finder shows a result.
+  path: PathView | null;
   // Files that pass the active graph filters, or null when none are active.
   visible: Set<string> | null;
   onSelect(id: string | null): void;
@@ -54,17 +57,19 @@ type Session = {
 // centres it, and "closer" also zooms in.
 type CameraMove = "reveal" | "center" | "closer";
 
-export function Constellation({ graph, label, neighborhood, impact, visible, onSelect, ref }: ConstellationProps) {
+export function Constellation({ graph, label, neighborhood, impact, path, visible, onSelect, ref }: ConstellationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const neighborhoodRef = useRef(neighborhood);
   const impactRef = useRef(impact);
+  const pathRef = useRef(path);
   const visibleRef = useRef(visible);
   const onSelectRef = useRef(onSelect);
   // A camera move waiting for its selection to be applied, since the
   // inspector opening changes the size of the graph area first.
   const pendingMoveRef = useRef<{ id: string; move: CameraMove } | null>(null);
   const [failedGraph, setFailedGraph] = useState<RenderGraph | null>(null);
+  const [readyGraph, setReadyGraph] = useState<RenderGraph | null>(null);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -84,11 +89,11 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
           angle: 0,
         });
       },
-      exportPng: (repositoryFullName) => {
+      exportPng: (repositoryName) => {
         const session = sessionRef.current;
         const container = containerRef.current;
         if (session === null || container === null) return Promise.resolve(false);
-        return exportConstellationPng(session, container, repositoryFullName);
+        return exportConstellationPng(session, container, repositoryName);
       },
     }),
     [],
@@ -106,7 +111,10 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
     // Sigma reads WebGL globals when its module is evaluated, so it is loaded
     // here rather than imported at the top, which would also run on the server.
     import("sigma")
-      .then(({ default: Sigma }) => {
+      .then(async ({ default: Sigma }) => {
+        // Laying out a large graph blocks the main thread, so the rendering
+        // status is given a frame to paint first.
+        await nextPaint();
         if (cancelled) return;
         const visual = toGraphology(graph);
         // Mutated in place by the handlers below and by the selection effect;
@@ -114,6 +122,7 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
         const state: FocusState = {
           neighborhood: neighborhoodRef.current,
           impact: impactRef.current,
+          path: pathRef.current,
           hovered: null,
           labelAll: labelsAllFiles(visual.order),
           visible: visibleRef.current,
@@ -166,6 +175,7 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
         // width when the inspector opens or the page gains a scrollbar.
         observer = new ResizeObserver(() => sigma.scheduleRender());
         observer.observe(container);
+        setReadyGraph(graph);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -212,6 +222,15 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
     session.sigma.refresh();
   }, [impact]);
 
+  // Path Finder, like impact mode, only restyles.
+  useEffect(() => {
+    pathRef.current = path;
+    const session = sessionRef.current;
+    if (session === null) return;
+    session.state.path = path;
+    session.sigma.refresh();
+  }, [path]);
+
   // Filters only change which nodes and edges the reducers hide: the camera
   // and the underlying layout are left alone.
   useEffect(() => {
@@ -238,8 +257,20 @@ export function Constellation({ graph, label, neighborhood, impact, visible, onS
           The graph could not be displayed in this browser.
         </p>
       )}
+      {!failed && readyGraph !== graph && (
+        <p
+          role="status"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted"
+        >
+          Rendering constellation…
+        </p>
+      )}
     </div>
   );
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 }
 
 // Runs the move now if the file is already the applied selection, otherwise
@@ -297,7 +328,7 @@ function moveCameraTo(session: Session, target: Partial<CameraState>) {
 async function exportConstellationPng(
   session: Session,
   container: HTMLDivElement,
-  repositoryFullName: string,
+  repositoryName: string,
 ): Promise<boolean> {
   const { sigma, state } = session;
   const dimensions = computeExportDimensions(container.offsetWidth, container.offsetHeight, window.devicePixelRatio || 1);
@@ -343,7 +374,7 @@ async function exportConstellationPng(
   const blob = await new Promise<Blob | null>((resolve) => canvas!.toBlob(resolve, "image/png"));
   if (blob === null) return false;
 
-  downloadBlob(blob, exportFileName(repositoryFullName));
+  downloadBlob(blob, exportFileName(repositoryName));
   return true;
 }
 

@@ -62,7 +62,7 @@ export function FileSearch({ index, visible, onPick, onEscape }: FileSearchProps
   }
 
   return (
-    <div className="relative w-full sm:max-w-sm">
+    <div className="relative w-full sm:max-w-xs">
       <label htmlFor={inputId} className="sr-only">
         Find a file
       </label>

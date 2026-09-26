@@ -10,7 +10,6 @@ const CONTENT_MARKER = "codefield-source-content-marker";
 function source(path: string, content: string): SourceFile {
   return {
     path,
-    sha: "0".repeat(40),
     size: content.length,
     extension: ".ts",
     language: "typescript",
@@ -92,18 +91,18 @@ describe("toRenderGraph", () => {
     assert.ok(!json.includes('"sha"'));
   });
 
-  it("never includes the GitHub token or authorization data", () => {
-    const token = "ghp_codefieldTestToken0123456789";
-    const previous = process.env.GITHUB_TOKEN;
-    process.env.GITHUB_TOKEN = token;
+  it("never includes the local session token or authorization data", () => {
+    const token = "codefieldSessionToken0123456789";
+    const previous = process.env.CODEFIELD_TOKEN;
+    process.env.CODEFIELD_TOKEN = token;
     try {
       const json = JSON.stringify(toRenderGraph(sampleGraph()));
 
       assert.ok(!json.includes(token));
       assert.ok(!/authorization|bearer|token/i.test(json));
     } finally {
-      if (previous === undefined) delete process.env.GITHUB_TOKEN;
-      else process.env.GITHUB_TOKEN = previous;
+      if (previous === undefined) delete process.env.CODEFIELD_TOKEN;
+      else process.env.CODEFIELD_TOKEN = previous;
     }
   });
 

@@ -36,6 +36,6 @@ export function unresolvedOf(analysis: ModuleAnalysis): string[] {
 }
 
 export function languagesOf(paths: string[]): Record<string, string> {
-  const blobs = paths.map((path) => ({ path, type: "blob" as const, sha: path, size: 10 }));
+  const blobs = paths.map((path) => ({ path, size: 10 }));
   return Object.fromEntries(selectSourceFiles(blobs).candidates.map((c) => [c.path, c.language]));
 }

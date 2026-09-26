@@ -1,309 +1,206 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { strToU8, zipSync, type Zippable } from "fflate";
+import { discoverRepository, type DiscoveryProgress } from "./discovery.ts";
+import { temporaryDirectory, trySymlink, writeFiles } from "./local/testing.ts";
+import { MAX_SOURCE_FILE_BYTES } from "./resources.ts";
 
-import { discoverRepository } from "./discovery.ts";
+let root: string;
+let remove: () => Promise<void>;
 
-const OWNER = "octo";
-const REPO = "demo";
-const METADATA_URL = `https://api.github.com/repos/${OWNER}/${REPO}`;
-const TREE_URL = `https://api.github.com/repos/${OWNER}/${REPO}/git/trees/main?recursive=1`;
-const ARCHIVE_URL = `https://api.github.com/repos/${OWNER}/${REPO}/zipball/main`;
-const ARCHIVE_ROOT = `${OWNER}-${REPO}-abc1234`;
-const REPOSITORY_URL = `https://github.com/${OWNER}/${REPO}`;
-
-function sha1(bytes: Uint8Array): string {
-  return createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
-}
-
-function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
-}
-
-function metadataBody(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 1,
-    name: REPO,
-    full_name: `${OWNER}/${REPO}`,
-    owner: { login: OWNER },
-    private: false,
-    archived: false,
-    html_url: REPOSITORY_URL,
-    default_branch: "main",
-    size: 10,
-    ...overrides,
-  };
-}
-
-type SourceFileFixture = { path: string; content: string };
-
-function treeFor(files: SourceFileFixture[]) {
-  return files.map(({ path, content }) => {
-    const bytes = strToU8(content);
-    return { path, mode: "100644", type: "blob", sha: sha1(bytes), size: bytes.length };
-  });
-}
-
-function archiveFor(files: SourceFileFixture[]): Uint8Array {
-  const inner: Zippable = {};
-  for (const { path, content } of files) inner[path] = strToU8(content);
-  return zipSync({ [ARCHIVE_ROOT]: inner });
-}
-
-// A fake global fetch that answers a fixed set of routes and errors on
-// anything unexpected, so a test only has to state what it wants to happen.
-function install(routes: Record<string, () => Response | Promise<Response>>) {
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input.toString();
-    const route = routes[url];
-    if (route === undefined) throw new Error(`unexpected request: ${url}`);
-    return route();
-  }) as typeof fetch;
-  return () => {
-    globalThis.fetch = original;
-  };
-}
-
-let restore: () => void;
-beforeEach(() => {
-  restore = install({});
+beforeEach(async () => {
+  ({ path: root, remove } = await temporaryDirectory());
 });
-afterEach(() => {
-  restore();
+afterEach(async () => {
+  await remove();
 });
 
-function routes(overrides: Record<string, () => Response | Promise<Response>>) {
-  restore();
-  restore = install(overrides);
+function edgesOf(graph: { edges: { source: string; target: string }[] }) {
+  return graph.edges.map((edge) => `${edge.source} -> ${edge.target}`);
 }
 
 describe("discoverRepository", () => {
-  it("rejects a malformed URL without making a request", async () => {
-    const result = await discoverRepository("not a url");
-
-    assert.equal(result.status, "error");
-    assert.ok(result.status === "error" && !result.error.retryable);
-  });
-
-  it("rejects non-string input", async () => {
-    const result = await discoverRepository(42);
-    assert.equal(result.status, "error");
-  });
-
-  it("succeeds for an ordinary repository", async () => {
-    const files = [
-      { path: "src/index.ts", content: "export const a = 1;\n" },
-      { path: "src/util.ts", content: "export const b = 2;\n" },
-    ];
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ sha: "t", truncated: false, tree: treeFor(files) }),
-      [ARCHIVE_URL]: () => new Response(Uint8Array.from(archiveFor(files)), { status: 200 }),
+  it("analyzes a local folder into a dependency graph", async () => {
+    await writeFiles(root, {
+      "src/index.ts": 'import { helper } from "./util";\nexport const x = helper();\n',
+      "src/util.ts": "export const helper = () => 1;\n",
+      "README.md": "# demo\n",
     });
 
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
     assert.equal(result.status, "success");
     if (result.status !== "success") return;
-    assert.equal(result.repository.fullName, "octo/demo");
-    assert.equal(result.repository.defaultBranch, "main");
+    assert.deepEqual(edgesOf(result.graph), ["src/index.ts -> src/util.ts"]);
+    assert.equal(result.repository.fileCount, 3);
     assert.equal(result.skippedCount, 0);
-    assert.equal(result.limited, false);
-    assert.equal(result.graph.nodes.length, 2);
+    assert.deepEqual(result.skipped, { tooLarge: 0, symlinks: 0, unreadable: 0, parseFailed: 0, unreadableDirectories: 0 });
   });
 
-  it("reports a repository that does not exist", async () => {
-    routes({ [METADATA_URL]: () => json({ message: "Not Found" }, 404) });
+  it("names the repository after its folder and never sends the absolute path", async () => {
+    await writeFiles(root, { "a.py": "import b\n", "b.py": "" });
 
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
-    assert.equal(result.status, "error");
-    assert.ok(result.status === "error" && result.error.retryable === false);
-    assert.match(result.status === "error" ? result.error.title : "", /not found/i);
+    assert.equal(result.status, "success");
+    if (result.status !== "success") return;
+    assert.equal(result.repository.name, root.split(/[\\/]/).at(-1));
+    assert.ok(!JSON.stringify(result).includes(root));
   });
 
-  it("reports a private repository without exposing GitHub's wording", async () => {
-    routes({ [METADATA_URL]: () => json(metadataBody({ private: true })) });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, false);
-    assert.ok(!result.error.message.includes("not supported"));
+  it("reports an empty folder as empty", async () => {
+    assert.equal((await discoverRepository(root)).status, "empty");
   });
 
-  it("reports rate limiting with a usable reset time", async () => {
-    routes({
-      [METADATA_URL]: () =>
-        json({ message: "API rate limit exceeded" }, 403, {
-          "x-ratelimit-remaining": "0",
-          "x-ratelimit-reset": "1790000000",
-        }),
-    });
+  it("reports a folder without supported files as unsupported, with nothing skipped", async () => {
+    await writeFiles(root, { "README.md": "# demo", "package.json": "{}" });
 
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, true);
-    assert.equal(result.error.retryAt, new Date(1790000000 * 1000).toISOString());
-  });
-
-  it("reports rate limiting even without a reset time", async () => {
-    routes({
-      [METADATA_URL]: () => json({ message: "secondary rate limit" }, 403),
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryAt, undefined);
-    assert.equal(result.error.retryable, true);
-  });
-
-  it("does not reveal that a server token was rejected", async () => {
-    routes({ [METADATA_URL]: () => json({ message: "Bad credentials" }, 401) });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.ok(!result.error.message.toLowerCase().includes("token"));
-    assert.ok(!result.error.message.toLowerCase().includes("credentials"));
-  });
-
-  it("reports a network failure reaching GitHub", async () => {
-    routes({
-      [METADATA_URL]: () => {
-        throw new Error("getaddrinfo ENOTFOUND api.github.com");
-      },
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, true);
-    assert.ok(!result.error.message.includes("ENOTFOUND"));
-  });
-
-  it("reports an unexpected upstream failure", async () => {
-    routes({ [METADATA_URL]: () => json({ message: "oops" }, 500) });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, true);
-  });
-
-  it("reports a truncated tree instead of analyzing a partial repository", async () => {
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ sha: "t", truncated: true, tree: [] }),
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, true);
-    assert.match(result.error.title, /tree/i);
-  });
-
-  it("treats a repository with an empty tree as empty, not an error", async () => {
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ sha: "t", truncated: false, tree: [] }),
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "empty");
-    if (result.status !== "empty") return;
-    assert.equal(result.repository.fullName, "octo/demo");
-  });
-
-  it("treats GitHub's empty-repository response (409) as empty, not an error", async () => {
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ message: "Git Repository is empty." }, 409),
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
-
-    assert.equal(result.status, "empty");
-  });
-
-  it("reports a repository with no supported source files, not as an error", async () => {
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () =>
-        json({
-          sha: "t",
-          truncated: false,
-          tree: [
-            { path: "README.md", mode: "100644", type: "blob", sha: sha1(strToU8("# demo")), size: 6 },
-            { path: "package.json", mode: "100644", type: "blob", sha: sha1(strToU8("{}")), size: 2 },
-          ],
-        }),
-    });
-
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
     assert.equal(result.status, "unsupported");
+    if (result.status !== "unsupported") return;
+    assert.equal(result.skippedCount, 0);
   });
 
-  it("reports an archive GitHub could not read", async () => {
-    const files = [{ path: "a.ts", content: "export {};\n" }];
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ sha: "t", truncated: false, tree: treeFor(files) }),
-      [ARCHIVE_URL]: () => new Response(Uint8Array.from(strToU8("not a zip file")), { status: 200 }),
-    });
+  it("counts supported files that are all too large instead of calling them unsupported", async () => {
+    await writeFiles(root, { "src/generated.ts": "x".repeat(MAX_SOURCE_FILE_BYTES + 1) });
 
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.equal(result.error.retryable, true);
-    assert.ok(!result.error.message.toLowerCase().includes("zip"));
+    assert.equal(result.status, "unsupported");
+    if (result.status !== "unsupported") return;
+    assert.equal(result.skipped.tooLarge, 1);
+    assert.equal(result.skippedCount, 1);
   });
 
-  it("reports skipped files without failing the analysis", async () => {
-    const included = { path: "src/a.ts", content: "export {};\n" };
-    const missingFromArchive = { path: "src/b.ts", content: "export {};\n" };
-    routes({
-      [METADATA_URL]: () => json(metadataBody()),
-      [TREE_URL]: () => json({ sha: "t", truncated: false, tree: treeFor([included, missingFromArchive]) }),
-      // The archive only contains one of the two selected files.
-      [ARCHIVE_URL]: () => new Response(Uint8Array.from(archiveFor([included])), { status: 200 }),
+  it("skips files that are not UTF-8 and analyzes the rest", async () => {
+    await writeFiles(root, {
+      "a.ts": 'import "./b";\n',
+      "b.ts": "",
+      "latin1.ts": Uint8Array.from([0x2f, 0x2f, 0x20, 0xe9, 0x0a]),
     });
 
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
     assert.equal(result.status, "success");
     if (result.status !== "success") return;
-    assert.equal(result.skippedCount, 1);
-    assert.equal(result.graph.nodes.length, 1);
+    assert.deepEqual(result.graph.nodes.map((node) => node.id), ["a.ts", "b.ts"]);
+    assert.equal(result.skipped.unreadable, 1);
   });
 
-  it("never lets a raw error message reach the presented result", async () => {
-    const secret = "ghp_leaked_token_marker";
-    routes({
-      [METADATA_URL]: () => json({ message: `internal failure ${secret}` }, 500),
+  it("leaves out dependency, build and version control directories", async () => {
+    await writeFiles(root, {
+      "src/a.js": 'require("lodash");\n',
+      "node_modules/lodash/index.js": "",
+      "dist/bundle.js": "",
+      ".git/hooks/pre-commit.py": "",
     });
 
-    const result = await discoverRepository(REPOSITORY_URL);
+    const result = await discoverRepository(root);
 
-    assert.equal(result.status, "error");
-    if (result.status !== "error") return;
-    assert.ok(!result.error.title.includes(secret));
-    assert.ok(!result.error.message.includes(secret));
+    assert.equal(result.status, "success");
+    if (result.status !== "success") return;
+    assert.deepEqual(result.graph.nodes.map((node) => node.id), ["src/a.js"]);
+  });
+
+  it("analyzes every file, with no cap on the number of files", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 1500; i++) files[`src/m${i}.ts`] = i === 0 ? "" : `import "./m${i - 1}";\n`;
+    await writeFiles(root, files);
+
+    const result = await discoverRepository(root);
+
+    assert.equal(result.status, "success");
+    if (result.status !== "success") return;
+    assert.equal(result.graph.nodes.length, 1500);
+    assert.equal(result.graph.edges.length, 1499);
+  });
+
+  it("does not follow symbolic links, and reports linked source files", async (t) => {
+    const outside = await temporaryDirectory();
+    try {
+      await writeFiles(outside.path, { "secret.ts": "export const secret = 1;\n" });
+      await writeFiles(root, { "a.ts": "" });
+      const linkedFile = await trySymlink(join(outside.path, "secret.ts"), join(root, "linked.ts"));
+      const linkedDir = await trySymlink(outside.path, join(root, "outside"), "dir");
+      if (!linkedFile || !linkedDir) return t.skip("symbolic links are not available");
+
+      const result = await discoverRepository(root);
+
+      assert.equal(result.status, "success");
+      if (result.status !== "success") return;
+      assert.deepEqual(result.graph.nodes.map((node) => node.id), ["a.ts"]);
+      assert.equal(result.skipped.symlinks, 1);
+    } finally {
+      await outside.remove();
+    }
+  });
+
+  it("survives a symbolic link loop", async (t) => {
+    await writeFiles(root, { "src/a.ts": "" });
+    if (!(await trySymlink(root, join(root, "src/loop"), "dir"))) return t.skip("symbolic links are not available");
+
+    const result = await discoverRepository(root);
+
+    assert.equal(result.status, "success");
+  });
+
+  it("reports progress through each stage with real counts", async () => {
+    await writeFiles(root, { "a.go": "package a\n", "b.go": "package a\n" });
+    const stages: DiscoveryProgress[] = [];
+
+    await discoverRepository(root, { onProgress: (progress) => stages.push(progress) });
+
+    assert.deepEqual([...new Set(stages.map((progress) => progress.stage))], ["discover", "read", "analysis", "graph"]);
+    assert.deepEqual(stages.at(-1), { stage: "graph", files: 2 });
+  });
+
+  it("stops when aborted", async () => {
+    await writeFiles(root, { "a.ts": "" });
+    const controller = new AbortController();
+    controller.abort();
+
+    await assert.rejects(discoverRepository(root, { signal: controller.signal }));
+  });
+
+  it("reports a missing folder and a file as errors", async () => {
+    const missing = await discoverRepository(join(root, "missing"));
+    assert.equal(missing.status, "error");
+
+    await writeFiles(root, { "file.ts": "" });
+    const file = await discoverRepository(join(root, "file.ts"));
+    assert.equal(file.status, "error");
+    if (file.status !== "error") return;
+    assert.equal(file.error.title, "Not a folder");
+  });
+
+  it("reads the branch and origin from the Git metadata, without credentials", async () => {
+    await writeFiles(root, {
+      "a.rs": "",
+      ".git/HEAD": "ref: refs/heads/feature/local\n",
+      ".git/config": '[core]\n\tbare = false\n[remote "origin"]\n\turl = https://user:secret-token@git.example.com/team/project.git\n',
+    });
+
+    const result = await discoverRepository(root);
+
+    assert.equal(result.status, "success");
+    if (result.status !== "success") return;
+    assert.equal(result.repository.branch, "feature/local");
+    assert.equal(result.repository.remote, "git.example.com/team/project");
+    assert.ok(!JSON.stringify(result).includes("secret-token"));
+  });
+
+  it("analyzes a folder that is not a Git repository", async () => {
+    await mkdir(join(root, "plain"));
+    await writeFiles(root, { "plain/main.c": '#include "util.h"\n', "plain/util.h": "" });
+
+    const result = await discoverRepository(join(root, "plain"));
+
+    assert.equal(result.status, "success");
+    if (result.status !== "success") return;
+    assert.equal(result.repository.remote, null);
+    assert.deepEqual(edgesOf(result.graph), ["main.c -> util.h"]);
   });
 });

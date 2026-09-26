@@ -2,17 +2,57 @@
   "name": "codefield",
   "version": "0.1.0",
   "private": true,
+  "description": "Understand a local codebase visually.",
+  "keywords": [
+    "code-visualization",
+    "dependency-graph",
+    "static-analysis",
+    "codebase",
+    "cli",
+    "developer-tools",
+    "local-first"
+  ],
+  "homepage": "https://github.com/keremcanozkurt/Codefield#readme",
+  "bugs": {
+    "url": "https://github.com/keremcanozkurt/Codefield/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keremcanozkurt/Codefield.git"
+  },
+  "license": "MIT",
+  "author": "Kerem Can Özkurt",
   "type": "module",
+  "bin": {
+    "codefield": "cli/codefield.mjs"
+  },
+  "files": [
+    "cli/*.mjs",
+    "!cli/*.test.mjs",
+    ".next",
+    "!.next/cache",
+    "!.next/dev",
+    "!.next/trace",
+    "!.next/trace-build",
+    "!.next/diagnostics",
+    "!.next/types",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node cli/codefield.mjs --dev",
+    "build": "next build --webpack",
+    "start": "node cli/codefield.mjs",
+    "codefield": "node cli/codefield.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --test 'src/**/*.test.ts'"
+    "test": "node --test \"src/**/*.test.ts\" \"cli/**/*.test.mjs\"",
+    "prepack": "node scripts/release-build.mjs"
   },
   "dependencies": {
-    "fflate": "^0.8.3",
     "graphology": "^0.26.0",
     "next": "16.3.6",
     "react": "19.2.8",

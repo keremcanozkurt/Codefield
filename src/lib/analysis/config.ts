@@ -1,11 +1,9 @@
 import ts from "typescript";
 
-import type { TreeEntry } from "../github/types.ts";
-import { isIgnoredPath } from "../source-files.ts";
+import { isIgnoredPath, type FileEntry } from "../source-files.ts";
 import { compareStrings, directoryOf, isRelativeSpecifier, joinRepositoryPath } from "./paths.ts";
 
 export const MAX_CONFIG_FILE_BYTES = 64 * 1024;
-export const MAX_CONFIG_FILES = 200;
 
 // tsconfig.json and jsconfig.json apply to the files below them. Other names
 // such as tsconfig.base.json are only read as `extends` targets.
@@ -14,11 +12,7 @@ const CONFIG_FILE_PATTERN = /^[jt]sconfig(\.[\w-]+)*\.json$/;
 const PROJECT_CONFIG_NAMES = ["tsconfig.json", "jsconfig.json"];
 const MAX_EXTENDS_DEPTH = 8;
 
-export type ConfigCandidate = {
-  path: string;
-  sha: string;
-  size: number;
-};
+export type ConfigCandidate = FileEntry;
 
 export type ConfigFile = {
   path: string;
@@ -78,21 +72,20 @@ export function isAuxiliaryFileName(name: string): boolean {
   return CONFIG_FILE_PATTERN.test(name) || MANIFEST_NAMES.has(name);
 }
 
-export function selectConfigFiles(entries: TreeEntry[]): ConfigCandidate[] {
+export function selectConfigFiles(entries: FileEntry[]): ConfigCandidate[] {
   const candidates: ConfigCandidate[] = [];
 
   for (const entry of entries) {
-    if (entry.type !== "blob" || entry.size === undefined) continue;
     if (entry.size > MAX_CONFIG_FILE_BYTES || isIgnoredPath(entry.path)) continue;
 
     const name = entry.path.slice(entry.path.lastIndexOf("/") + 1);
     if (!isAuxiliaryFileName(name)) continue;
 
-    candidates.push({ path: entry.path, sha: entry.sha, size: entry.size });
+    candidates.push({ path: entry.path, size: entry.size });
   }
 
   candidates.sort((a, b) => compareStrings(a.path, b.path));
-  return candidates.slice(0, MAX_CONFIG_FILES);
+  return candidates;
 }
 
 // Reads only compilerOptions.baseUrl, compilerOptions.paths and `extends`.

@@ -266,7 +266,6 @@ describe("domain separation", () => {
   it("does not add selection state to the dependency graph or the payload", () => {
     const files: SourceFile[] = ["src/a.ts", "src/b.ts"].map((path) => ({
       path,
-      sha: "0".repeat(40),
       size: 10,
       extension: ".ts",
       language: "typescript",

@@ -68,7 +68,6 @@ function sourceFile(path: string, content: string): SourceFile {
   const extension = path.slice(path.lastIndexOf(".")) as SourceExtension;
   return {
     path,
-    sha: "0".repeat(40),
     size: content.length,
     extension,
     language: extension === ".ts" || extension === ".tsx" ? "typescript" : "javascript",

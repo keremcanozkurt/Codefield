@@ -71,10 +71,10 @@ export function composeExport(
   }
 }
 
-// codefield-<owner>-<repo>.png, with anything outside a conservative
+// codefield-<repository>.png, with anything outside a conservative
 // filename-safe set collapsed to a single "-".
-export function exportFileName(repositoryFullName: string): string {
-  const sanitized = repositoryFullName
+export function exportFileName(repositoryName: string): string {
+  const sanitized = repositoryName
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");

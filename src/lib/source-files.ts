@@ -1,26 +1,24 @@
-import type { TreeEntry } from "./github/types.ts";
 import {
   isSourceExtension,
   languageForExtension,
   type LanguageId,
   type SourceExtension,
 } from "./languages/registry.ts";
+import { MAX_SOURCE_FILE_BYTES } from "./resources.ts";
 
 export { SOURCE_EXTENSIONS, type SourceExtension } from "./languages/registry.ts";
 
-// Files above this size are nearly always generated or vendored, and each one
-// is downloaded in full.
-export const MAX_SOURCE_FILE_BYTES = 512 * 1024;
-
-// Every loaded file costs one GitHub API request, so a single repository is
-// capped well below the authenticated limit of 5,000 requests per hour.
-export const MAX_SOURCE_FILES = 500;
+export { MAX_SOURCE_FILE_BYTES } from "./resources.ts";
 
 // Dependency, build-output and tool directories. Only names that are almost
 // never used for hand-written source are listed: "bin", for example, holds Rust
 // binaries and Ruby executables, so it is not ignored even though .NET builds
 // into it.
 const IGNORED_DIRECTORIES = new Set([
+  // Version control metadata
+  ".git",
+  ".hg",
+  ".svn",
   // JavaScript
   "node_modules",
   "bower_components",
@@ -68,9 +66,15 @@ const GENERATED_FILE_PATTERN = /\.(min|bundle)\.jsx?$/;
 
 export type SourceLanguage = LanguageId;
 
+// A regular file in the repository, by repository-relative path with "/"
+// separators on every platform.
+export type FileEntry = {
+  path: string;
+  size: number;
+};
+
 export type SourceCandidate = {
   path: string;
-  sha: string;
   size: number;
   extension: SourceExtension;
   language: SourceLanguage;
@@ -80,7 +84,10 @@ export type SourceFile = SourceCandidate & {
   content: string;
 };
 
-export type SkipReason = "too_large" | "missing" | "content_mismatch" | "not_utf8";
+// too_large: over the per-file limit. not_utf8: not UTF-8 text. symlink: a
+// symbolic link, which is never followed. unreadable: the file could not be
+// opened or read, or changed into something other than a regular file.
+export type SkipReason = "too_large" | "not_utf8" | "symlink" | "unreadable";
 
 export type SkippedSource = {
   path: string;
@@ -91,14 +98,12 @@ export type SourceSelection = {
   candidates: SourceCandidate[];
   skipped: SkippedSource[];
   eligibleCount: number;
-  limited: boolean;
 };
 
-export function selectSourceFiles(entries: TreeEntry[]): SourceSelection {
+export function selectSourceFiles(entries: FileEntry[]): SourceSelection {
   const eligible: SourceCandidate[] = [];
 
   for (const entry of entries) {
-    if (entry.type !== "blob" || entry.size === undefined) continue;
     if (isIgnoredPath(entry.path)) continue;
 
     const extension = sourceExtension(entry.path);
@@ -106,7 +111,6 @@ export function selectSourceFiles(entries: TreeEntry[]): SourceSelection {
 
     eligible.push({
       path: entry.path,
-      sha: entry.sha,
       size: entry.size,
       extension,
       language: languageForExtension(extension)!.id,
@@ -127,12 +131,7 @@ export function selectSourceFiles(entries: TreeEntry[]): SourceSelection {
     }
   }
 
-  return {
-    candidates: loadable.slice(0, MAX_SOURCE_FILES),
-    skipped,
-    eligibleCount: eligible.length,
-    limited: loadable.length > MAX_SOURCE_FILES,
-  };
+  return { candidates: loadable, skipped, eligibleCount: eligible.length };
 }
 
 export function sourceExtension(path: string): SourceExtension | null {
@@ -147,6 +146,9 @@ export function sourceExtension(path: string): SourceExtension | null {
 }
 
 export function isIgnoredPath(path: string): boolean {
-  const directories = path.split("/").slice(0, -1);
-  return directories.some((directory) => IGNORED_DIRECTORIES.has(directory) || directory.endsWith(".egg-info"));
+  return path.split("/").slice(0, -1).some(isIgnoredDirectoryName);
+}
+
+export function isIgnoredDirectoryName(name: string): boolean {
+  return IGNORED_DIRECTORIES.has(name) || name.endsWith(".egg-info");
 }
